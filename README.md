@@ -100,6 +100,10 @@ Recommended balance for most teams:
 
 - `scripts/local-ai/bootstrap-agenticseek.sh` clones upstream AgenticSeek into `.local/agenticseek` and updates `config.ini` to use Ollama.
 - GitHub repository review requests are handled by a grounded review path that fetches README + selected repo files via GitHub APIs and summarizes them using your local Ollama model.
+- Grounded review now uses query-aware file selection with coverage guardrails (docs/CI/deploy/app/tests) and a two-pass mode (per-file map + final synthesis) for deeper architecture/security/QA requests.
+- Grounded review includes snapshot caching and short-lived response caching for repeated identical repo questions to reduce latency on iterative review loops.
+- Local fallback snapshots prioritize recently changed files (`git status` + latest diff) so active work gets more review weight.
+- Cache behavior is tunable via `GROUNDED_REVIEW_CACHE_TTL_SECONDS` (snapshot cache, default 900s) and `GROUNDED_REVIEW_ANSWER_CACHE_TTL_SECONDS` (response cache, default 600s).
 - If a GitHub repo is private/unreachable, the grounded path falls back to a local clone under `WORK_DIR` (mounted to `/opt/workspace` in the backend container).
 - `.env.local` is ignored by git and auto-seeded with random values for `SEARXNG_SECRET_KEY` and `N8N_ENCRYPTION_KEY` on first bootstrap.
 - Default model is `qwen2.5:14b` in `deploy/local-ai/.env.local`.

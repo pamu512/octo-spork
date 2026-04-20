@@ -7,8 +7,11 @@ requests by grounding the response on fetched repository artifacts.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import re
+import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -78,6 +81,29 @@ PRIORITY_HINTS = (
     "deploy",
 )
 
+REVIEW_DIMENSION_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "security": ("security", "harden", "hardening", "auth", "threat", "vulnerability"),
+    "architecture": ("architecture", "design", "system", "service", "boundary"),
+    "qa": ("qa", "test", "regression", "quality", "reliability"),
+    "performance": ("performance", "latency", "speed", "optimize", "cost"),
+}
+
+MUST_HAVE_PATTERNS: tuple[str, ...] = (
+    "readme.md",
+    ".github/workflows/",
+    "docker-compose",
+    "dockerfile",
+    "security.md",
+    "deploy/",
+    "services/",
+    "src/",
+    "tests/",
+)
+
+CACHE_FILE_PATH = Path(os.getenv("GROUNDED_REVIEW_CACHE_FILE", "/tmp/octo-spork-grounded-cache.json"))
+CACHE_TTL_SECONDS = int(os.getenv("GROUNDED_REVIEW_CACHE_TTL_SECONDS", "900"))
+ANSWER_CACHE_TTL_SECONDS = int(os.getenv("GROUNDED_REVIEW_ANSWER_CACHE_TTL_SECONDS", "600"))
+
 
 @dataclass
 class RepoFile:
@@ -104,7 +130,32 @@ def should_use_grounded_review(query: str) -> bool:
     return any(keyword in lowered for keyword in REVIEW_KEYWORDS) or "github.com" in lowered
 
 
-def score_candidate_path(path: str) -> int:
+def build_review_profile(query: str) -> dict[str, int]:
+    lowered = query.lower()
+    profile: dict[str, int] = {}
+    for dimension, keywords in REVIEW_DIMENSION_KEYWORDS.items():
+        profile[dimension] = 3 if any(keyword in lowered for keyword in keywords) else 1
+    return profile
+
+
+def classify_candidate_path(path: str) -> str:
+    lowered = path.lower()
+    if lowered.endswith("readme.md") or lowered.startswith("docs/"):
+        return "docs"
+    if lowered.startswith(".github/workflows/"):
+        return "ci"
+    if lowered.startswith("deploy/") or lowered.startswith("infra/") or "compose" in lowered:
+        return "deploy"
+    if lowered.startswith("tests/") or "/tests/" in lowered:
+        return "tests"
+    if lowered.startswith("services/") or lowered.startswith("src/"):
+        return "app"
+    if lowered.endswith("package.json") or lowered.endswith("pyproject.toml") or lowered.endswith("requirements.txt"):
+        return "config"
+    return "misc"
+
+
+def score_candidate_path(path: str, query_tokens: set[str], review_profile: dict[str, int]) -> int:
     lowered = path.lower()
     score = 0
     if lowered.startswith(".github/workflows/"):
@@ -125,18 +176,173 @@ def score_candidate_path(path: str) -> int:
         score += 50
     if any(hint in lowered for hint in PRIORITY_HINTS):
         score += 20
+    if query_tokens and any(token in lowered for token in query_tokens):
+        score += 30
+    if review_profile.get("security", 1) > 1 and any(k in lowered for k in ("security", "auth", "policy", "token", "secret")):
+        score += 35
+    if review_profile.get("architecture", 1) > 1 and any(k in lowered for k in ("service", "api", "controller", "model", "schema")):
+        score += 30
+    if review_profile.get("qa", 1) > 1 and any(k in lowered for k in ("test", "spec", "workflow", "ci")):
+        score += 25
+    if review_profile.get("performance", 1) > 1 and any(k in lowered for k in ("cache", "perf", "benchmark", "queue")):
+        score += 20
     if "/dist/" in lowered or "/build/" in lowered or "node_modules/" in lowered:
         score -= 100
     return score
 
 
+def _load_cache() -> dict[str, Any]:
+    if not CACHE_FILE_PATH.exists():
+        return {}
+    try:
+        return json.loads(CACHE_FILE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_cache(cache: dict[str, Any]) -> None:
+    try:
+        CACHE_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CACHE_FILE_PATH.write_text(json.dumps(cache), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _snapshot_to_cacheable(snapshot: dict[str, Any]) -> dict[str, Any]:
+    files = [
+        {"path": f.path, "content": f.content, "size": f.size}
+        for f in snapshot.get("files", [])
+    ]
+    data = dict(snapshot)
+    data["files"] = files
+    return data
+
+
+def _snapshot_from_cacheable(snapshot: dict[str, Any]) -> dict[str, Any]:
+    data = dict(snapshot)
+    data["files"] = [
+        RepoFile(path=str(f["path"]), content=str(f["content"]), size=int(f["size"]))
+        for f in snapshot.get("files", [])
+    ]
+    return data
+
+
+def _cache_key(owner: str, repo: str, query: str) -> str:
+    q = " ".join(query.lower().split())
+    return f"{owner}/{repo}::{q[:240]}"
+
+
+def _answer_cache_key(owner: str, repo: str, query: str, model: str) -> str:
+    return f"answer::{model}::{_cache_key(owner, repo, query)}"
+
+
+def get_cached_snapshot(owner: str, repo: str, query: str) -> dict[str, Any] | None:
+    cache = _load_cache()
+    entry = cache.get(_cache_key(owner, repo, query))
+    if not isinstance(entry, dict):
+        return None
+    ts = int(entry.get("ts", 0) or 0)
+    if not ts or int(time.time()) - ts > CACHE_TTL_SECONDS:
+        return None
+    payload = entry.get("snapshot")
+    if not isinstance(payload, dict):
+        return None
+    return _snapshot_from_cacheable(payload)
+
+
+def set_cached_snapshot(owner: str, repo: str, query: str, snapshot: dict[str, Any]) -> None:
+    cache = _load_cache()
+    cache[_cache_key(owner, repo, query)] = {
+        "ts": int(time.time()),
+        "snapshot": _snapshot_to_cacheable(snapshot),
+    }
+    # Keep cache bounded.
+    if len(cache) > 24:
+        keys = sorted(
+            cache.keys(),
+            key=lambda k: int((cache.get(k) or {}).get("ts", 0) or 0),
+        )
+        for key in keys[:-24]:
+            cache.pop(key, None)
+    _save_cache(cache)
+
+
+def get_cached_answer(owner: str, repo: str, query: str, model: str) -> dict[str, Any] | None:
+    cache = _load_cache()
+    entry = cache.get(_answer_cache_key(owner, repo, query, model))
+    if not isinstance(entry, dict):
+        return None
+    ts = int(entry.get("ts", 0) or 0)
+    if not ts or int(time.time()) - ts > ANSWER_CACHE_TTL_SECONDS:
+        return None
+    payload = entry.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    if not isinstance(payload.get("answer"), str):
+        return None
+    return payload
+
+
+def set_cached_answer(owner: str, repo: str, query: str, model: str, payload: dict[str, Any]) -> None:
+    cache = _load_cache()
+    cache[_answer_cache_key(owner, repo, query, model)] = {
+        "ts": int(time.time()),
+        "payload": payload,
+    }
+    if len(cache) > 40:
+        keys = sorted(
+            cache.keys(),
+            key=lambda k: int((cache.get(k) or {}).get("ts", 0) or 0),
+        )
+        for key in keys[:-40]:
+            cache.pop(key, None)
+    _save_cache(cache)
+
+
+def detect_recent_local_changes(repo_path: Path) -> set[str]:
+    hints: set[str] = set()
+    try:
+        status = subprocess.run(
+            ["git", "-C", str(repo_path), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        for line in status.stdout.splitlines():
+            candidate = line[3:].strip()
+            if candidate:
+                hints.add(candidate)
+    except Exception:
+        pass
+
+    try:
+        diff = subprocess.run(
+            ["git", "-C", str(repo_path), "diff", "--name-only", "HEAD~1..HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        for line in diff.stdout.splitlines():
+            candidate = line.strip()
+            if candidate:
+                hints.add(candidate)
+    except Exception:
+        pass
+    return hints
+
+
 def select_candidate_files(
     tree_entries: Iterable[dict[str, Any]],
-    max_files: int = 16,
-    max_total_bytes: int = 350_000,
-    max_file_bytes: int = 120_000,
+    query: str = "",
+    preferred_paths: set[str] | None = None,
+    max_files: int = 12,
+    max_total_bytes: int = 220_000,
+    max_file_bytes: int = 80_000,
 ) -> list[str]:
-    candidates: list[tuple[int, int, str]] = []
+    query_tokens = set(re.findall(r"[a-z0-9_]+", query.lower()))
+    review_profile = build_review_profile(query)
+    preferred_lower = {p.lower() for p in (preferred_paths or set())}
+    candidates: list[dict[str, Any]] = []
     for entry in tree_entries:
         if entry.get("type") != "blob":
             continue
@@ -150,19 +356,76 @@ def select_candidate_files(
             ext = ".dockerfile"
         if ext not in CODE_EXTENSIONS and "/" in lowered:
             continue
-        candidates.append((score_candidate_path(path), size, path))
+        category = classify_candidate_path(path)
+        score = score_candidate_path(path, query_tokens, review_profile)
+        if lowered in preferred_lower or any(lowered.endswith("/" + pref) for pref in preferred_lower):
+            score += 120
+        is_must_have = any(pattern in lowered for pattern in MUST_HAVE_PATTERNS)
+        candidates.append(
+            {
+                "score": score,
+                "size": size,
+                "path": path,
+                "category": category,
+                "must_have": is_must_have,
+            }
+        )
 
-    candidates.sort(key=lambda item: (-item[0], item[1], item[2]))
+    candidates.sort(key=lambda item: (-int(item["score"]), int(item["size"]), str(item["path"])))
     selected: list[str] = []
     total = 0
-    for score, size, path in candidates:
+    selected_set: set[str] = set()
+
+    # Phase 1: force key coverage files when available.
+    for item in candidates:
+        if len(selected) >= max_files:
+            break
+        if not item["must_have"]:
+            continue
+        path = str(item["path"])
+        size = int(item["size"])
+        if path in selected_set:
+            continue
+        if total + size > max_total_bytes:
+            continue
+        if int(item["score"]) < 0:
+            continue
+        selected.append(path)
+        selected_set.add(path)
+        total += size
+
+    # Phase 2: ensure breadth across major categories.
+    major_categories = ("app", "tests", "ci", "deploy", "docs")
+    for category in major_categories:
+        if len(selected) >= max_files:
+            break
+        for item in candidates:
+            path = str(item["path"])
+            size = int(item["size"])
+            if path in selected_set or item["category"] != category:
+                continue
+            if int(item["score"]) < 0 or total + size > max_total_bytes:
+                continue
+            selected.append(path)
+            selected_set.add(path)
+            total += size
+            break
+
+    # Phase 3: highest score fill to budget.
+    for item in candidates:
+        score = int(item["score"])
+        size = int(item["size"])
+        path = str(item["path"])
         if score < 0:
             continue
         if len(selected) >= max_files:
             break
+        if path in selected_set:
+            continue
         if total + size > max_total_bytes:
             continue
         selected.append(path)
+        selected_set.add(path)
         total += size
     return selected
 
@@ -188,7 +451,7 @@ class GitHubSnapshotFetcher:
         response.raise_for_status()
         return response.text
 
-    def fetch_snapshot(self, owner: str, repo: str) -> dict[str, Any]:
+    def fetch_snapshot(self, owner: str, repo: str, query: str = "") -> dict[str, Any]:
         meta = self._get_json(f"https://api.github.com/repos/{owner}/{repo}")
         default_branch = meta.get("default_branch", "main")
 
@@ -204,7 +467,7 @@ class GitHubSnapshotFetcher:
         tree_json = self._get_json(
             f"https://api.github.com/repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1"
         )
-        selected_paths = select_candidate_files(tree_json.get("tree", []))
+        selected_paths = select_candidate_files(tree_json.get("tree", []), query=query or f"{owner}/{repo}")
 
         files: list[RepoFile] = []
         for path in selected_paths:
@@ -215,7 +478,7 @@ class GitHubSnapshotFetcher:
                 continue
             if "\x00" in content:
                 continue
-            files.append(RepoFile(path=path, content=content[:20_000], size=len(content)))
+            files.append(RepoFile(path=path, content=content[:8_000], size=len(content)))
 
         return {
             "owner": owner,
@@ -254,7 +517,7 @@ def discover_local_repo(repo_name: str) -> Path | None:
     return None
 
 
-def fetch_local_snapshot(repo_name: str) -> dict[str, Any] | None:
+def fetch_local_snapshot(repo_name: str, query: str = "") -> dict[str, Any] | None:
     repo_path = discover_local_repo(repo_name)
     if repo_path is None:
         return None
@@ -277,14 +540,19 @@ def fetch_local_snapshot(repo_name: str) -> dict[str, Any] | None:
         size = path.stat().st_size
         tree_entries.append({"type": "blob", "path": str(relative), "size": size})
 
-    selected_paths = select_candidate_files(tree_entries)
+    changed_paths = detect_recent_local_changes(repo_path)
+    selected_paths = select_candidate_files(
+        tree_entries,
+        query=query or repo_name,
+        preferred_paths=changed_paths,
+    )
     files: list[RepoFile] = []
     for rel in selected_paths:
         file_path = repo_path / rel
         if not file_path.exists():
             continue
         content = file_path.read_text(encoding="utf-8", errors="ignore")
-        files.append(RepoFile(path=rel, content=content[:20_000], size=len(content)))
+        files.append(RepoFile(path=rel, content=content[:8_000], size=len(content)))
 
     return {
         "owner": "local",
@@ -300,7 +568,7 @@ def fetch_local_snapshot(repo_name: str) -> dict[str, Any] | None:
     }
 
 
-def build_grounded_review_prompt(query: str, snapshot: dict[str, Any]) -> str:
+def build_grounded_review_prompt(query: str, snapshot: dict[str, Any], map_digest: str = "") -> str:
     files_text = []
     for file_info in snapshot["files"]:
         files_text.append(f"\n### FILE: {file_info.path}\n{file_info.content}\n")
@@ -313,6 +581,9 @@ If evidence is insufficient, explicitly say so and do not invent facts.
 
 User request:
 {query}
+
+If available, use this preliminary per-file analysis digest as additional evidence:
+{map_digest or "(none)"}
 
 Repository metadata:
 - owner/repo: {snapshot["owner"]}/{snapshot["repo"]}
@@ -329,18 +600,27 @@ Repository files:
 {files_joined}
 
 Return markdown with these sections:
-1) What this system does (grounded)
-2) Strengths
-3) Critical risks and potential regressions (highest severity first)
-4) Hardening recommendations (short-term, medium-term)
-5) QA test strategy for existing features
-6) Top 5 concrete next actions
+1) System summary (grounded)
+2) Severity-ranked findings (Critical / High / Medium / Low)
+3) Hardening plan (short-term, medium-term)
+4) QA strategy (focus on regression prevention)
+5) Top 5 concrete next actions
+6) Confidence and evidence gaps
 
 Use explicit file citations like `path/to/file`.
+For each Critical/High finding, include: risk, why it matters, and one concrete mitigation.
 """
 
 
-def run_ollama_review(prompt: str, model: str, ollama_base_url: str) -> str:
+def run_ollama_review(
+    prompt: str,
+    model: str,
+    ollama_base_url: str,
+    *,
+    num_ctx: int = 16384,
+    temperature: float = 0.1,
+    timeout_seconds: int = 420,
+) -> str:
     endpoint = ollama_base_url.rstrip("/") + "/api/generate"
     response = requests.post(
         endpoint,
@@ -348,13 +628,91 @@ def run_ollama_review(prompt: str, model: str, ollama_base_url: str) -> str:
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0.1, "num_ctx": 16384},
+            "options": {"temperature": temperature, "num_ctx": num_ctx},
         },
-        timeout=420,
+        timeout=timeout_seconds,
     )
     response.raise_for_status()
     payload = response.json()
     return payload.get("response", "").strip()
+
+
+def should_use_two_pass_review(query: str, files: Iterable[Any]) -> bool:
+    file_count = len(list(files))
+    lowered = query.lower()
+    deep_request = any(
+        token in lowered
+        for token in (
+            "critical",
+            "architecture",
+            "hardening",
+            "security",
+            "regression",
+            "qa",
+            "audit",
+        )
+    )
+    if file_count >= 12:
+        return True
+    return deep_request and file_count >= 10
+
+
+def build_map_review_prompt(query: str, snapshot: dict[str, Any], files: list[RepoFile]) -> str:
+    file_chunks: list[str] = []
+    for file_info in files:
+        file_chunks.append(
+            f"FILE: {file_info.path}\n"
+            f"CONTENT_START\n{file_info.content[:4_000]}\nCONTENT_END\n"
+        )
+    return f"""
+You are a senior software engineer and QA reviewer.
+Analyze each file independently and produce compact JSON only.
+
+User request:
+{query}
+
+Repository:
+- owner/repo: {snapshot["owner"]}/{snapshot["repo"]}
+- branch: {snapshot["default_branch"]}
+
+Files to analyze:
+{chr(10).join(file_chunks)}
+
+Return strict JSON object:
+{{
+  "file_findings": [
+    {{
+      "path": "string",
+      "critical_risks": ["..."],
+      "high_risks": ["..."],
+      "regression_notes": ["..."],
+      "hardening_actions": ["..."]
+    }}
+  ],
+  "global_patterns": ["..."]
+}}
+"""
+
+
+def run_map_review(query: str, snapshot: dict[str, Any], model: str, ollama_base_url: str) -> str:
+    files = list(snapshot.get("files", []))
+    if not files:
+        return ""
+    map_files = files[:8]
+    map_prompt = build_map_review_prompt(query, snapshot, map_files)
+    try:
+        response_text = run_ollama_review(
+            map_prompt,
+            model,
+            ollama_base_url,
+            num_ctx=8192,
+            temperature=0.0,
+            timeout_seconds=240,
+        )
+        parsed = json.loads(response_text)
+        return json.dumps(parsed, indent=2)
+    except Exception:
+        return ""
 
 
 def grounded_repo_review(query: str, model: str, ollama_base_url: str) -> dict[str, Any]:
@@ -367,14 +725,25 @@ def grounded_repo_review(query: str, model: str, ollama_base_url: str) -> dict[s
         }
 
     owner, name = repo
+    cached_answer = get_cached_answer(owner, name, query, model)
+    if cached_answer is not None:
+        return {
+            "success": bool(cached_answer.get("success", True)),
+            "answer": str(cached_answer.get("answer", "")),
+            "sources": list(cached_answer.get("sources", [])),
+        }
+
     fetcher = GitHubSnapshotFetcher()
-    snapshot = None
+    snapshot = get_cached_snapshot(owner, name, query)
     remote_error = ""
-    try:
-        snapshot = fetcher.fetch_snapshot(owner, name)
-    except Exception as exc:
-        remote_error = str(exc)
-        snapshot = fetch_local_snapshot(name)
+    if snapshot is None:
+        try:
+            snapshot = fetcher.fetch_snapshot(owner, name, query=query)
+        except Exception as exc:
+            remote_error = str(exc)
+            snapshot = fetch_local_snapshot(name, query=query)
+        if snapshot is not None:
+            set_cached_snapshot(owner, name, query, snapshot)
 
     if snapshot is None:
         return {
@@ -393,13 +762,25 @@ def grounded_repo_review(query: str, model: str, ollama_base_url: str) -> dict[s
             "sources": [],
         }
 
-    prompt = build_grounded_review_prompt(query, snapshot)
+    map_digest = ""
+    if should_use_two_pass_review(query, snapshot.get("files", [])):
+        map_digest = run_map_review(query, snapshot, model, ollama_base_url)
+
+    prompt = build_grounded_review_prompt(query, snapshot, map_digest=map_digest)
     try:
-        answer = run_ollama_review(prompt, model, ollama_base_url)
+        answer = run_ollama_review(
+            prompt,
+            model,
+            ollama_base_url,
+            num_ctx=12288 if map_digest else 14336,
+            timeout_seconds=210,
+        )
     except Exception as exc:
         return {
             "success": False,
             "answer": f"Grounded review generation failed: {exc}",
             "sources": snapshot["sources"],
         }
-    return {"success": True, "answer": answer, "sources": snapshot["sources"]}
+    response_payload = {"success": True, "answer": answer, "sources": snapshot["sources"]}
+    set_cached_answer(owner, name, query, model, response_payload)
+    return response_payload
