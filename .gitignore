@@ -1,0 +1,6 @@
+.DS_Store
+.env
+deploy/local-ai/.env.local
+.local/
+__pycache__/
+*.py[cod]
