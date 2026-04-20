@@ -13,7 +13,7 @@ This repository replicates the XDA stack using:
 - Ollama installed on host
 - Python 3.10+ on host
 
-## Cross-platform runner
+## Cross-platform runner (host OS support)
 
 Primary command interface:
 
@@ -22,6 +22,11 @@ python -m local_ai_stack up --env-file deploy/local-ai/.env.local
 python -m local_ai_stack verify --env-file deploy/local-ai/.env.local
 python -m local_ai_stack down --env-file deploy/local-ai/.env.local
 ```
+
+Diff-focused review (optional):
+
+- `python -m local_ai_stack diff-preview --repo . --base <ref> --head <ref>` prints a markdown preview (no Ollama). GitHub Actions can run this on every PR; see `.github/workflows/pr-diff-preview.yml`.
+- `python -m local_ai_stack review-diff --env-file deploy/local-ai/.env.local --repo . --base <ref> --head <ref>` runs the full grounded LLM review over files touched in that range (requires Ollama per your `.env.local`).
 
 Wrappers:
 
@@ -83,29 +88,30 @@ Recommended balance for most teams:
 
 ## Platform limitations
 
-- Windows:
-  - current flow is best from PowerShell + Docker Desktop; WSL2 is recommended for best compatibility
-  - ensure `WORK_DIR` points to an existing local path, and Docker Desktop has access to that drive
-- Linux:
-  - works natively; verify `host.docker.internal` support in your Docker version (or add explicit host gateway mapping if needed)
-- macOS Apple Silicon:
-  - backend defaults to `linux/amd64` compatibility mode for AgenticSeek browser stack reliability
-  - Ollama still runs natively on host (Metal), but backend emulation reduces throughput
-- All OS:
-  - grounded review analyzes a prioritized subset of files, not every file in very large repositories
-  - GitHub API rate limits apply for repeated external repo reviews
-  - private repos require local clone fallback via `WORK_DIR` mount
+- **macOS Apple Silicon:** primary tested path. AgenticSeek backend images may use `linux/amd64` for browser automation reliability; Ollama stays on the host (Metal). Expect heavier CPU use from emulation.
+- **Linux:** expected to work with standard Docker; confirm `host.docker.internal` (or an explicit extra host mapping) matches your Docker version. Mind case-sensitive filesystems vs bind mounts.
+- **Windows:** best-effort — use **Docker Desktop + WSL2**, PowerShell wrappers, and a `WORK_DIR` on a drive Docker can mount; watch path separators and CRLF vs bind-mount quirks.
+- **All OS:** GitHub API rate limits apply for remote repo snapshots; private repos need a local clone under `WORK_DIR` (mounted at `/opt/workspace` in the backend).
+
+## Grounded review: what it is (and is not)
+
+Grounded review is **priority-guided triage** over a **bounded sample** of files (heuristic scoring + caps), **not** a full-repo or formal security audit. It is **advisory** LLM output — useful for spotting likely hot spots, **not** a merge gate or proof that no critical bugs exist elsewhere.
+
+**Default caps** (override via env, see `deploy/local-ai/.env.example`): up to **12** files, **~220k** bytes total evidence budget, **80k** bytes per file excerpt, README + excerpts fed to the model. Large repos will have many files **never examined**.
+
+**Performance:** the **first** review of a repo/question is often **minutes** (LLM-bound). **Repeat identical** questions can be near-instant thanks to the answer cache until TTL expires. For quicker, shallower passes: set `GROUNDED_REVIEW_ENABLE_TWO_PASS=false` and lower `GROUNDED_REVIEW_MAX_FILES` (e.g. `6`).
+
+**Caching:** snapshot cache is **time-TTL** only. **Answer** cache keys include the **revision SHA** when known so a new default-branch tip does not reuse stale narrative answers for the same prompt.
 
 ## Notes
 
 - `scripts/local-ai/bootstrap-agenticseek.sh` clones upstream AgenticSeek into `.local/agenticseek` and updates `config.ini` to use Ollama.
-- GitHub repository review requests are handled by a grounded review path that fetches README + selected repo files via GitHub APIs and summarizes them using your local Ollama model.
-- Grounded review now uses query-aware file selection with coverage guardrails (docs/CI/deploy/app/tests) and a two-pass mode (per-file map + final synthesis) for deeper architecture/security/QA requests.
-- Grounded review includes snapshot caching and short-lived response caching for repeated identical repo questions to reduce latency on iterative review loops.
-- Local fallback snapshots prioritize recently changed files (`git status` + latest diff) so active work gets more review weight.
-- Cache behavior is tunable via `GROUNDED_REVIEW_CACHE_TTL_SECONDS` (snapshot cache, default 900s) and `GROUNDED_REVIEW_ANSWER_CACHE_TTL_SECONDS` (response cache, default 600s).
-- If a GitHub repo is private/unreachable, the grounded path falls back to a local clone under `WORK_DIR` (mounted to `/opt/workspace` in the backend container).
-- `.env.local` is ignored by git and auto-seeded with random values for `SEARXNG_SECRET_KEY` and `N8N_ENCRYPTION_KEY` on first bootstrap.
+- GitHub review requests fetch README + a **prioritized subset** of files (see scope note + coverage metadata in the response).
+- Selection uses query tokens, path heuristics (CI/deploy/app/tests/docs), and optional “must-have” path patterns — easy to miss critical logic that does not match those hints.
+- Two-pass mode runs a **best-effort** JSON “map” pass over up to **8** sampled files; malformed JSON falls back to single-pass with an explicit **map status** line in the scope note.
+- Tunable: `GROUNDED_REVIEW_CACHE_TTL_SECONDS`, `GROUNDED_REVIEW_ANSWER_CACHE_TTL_SECONDS`, `GROUNDED_REVIEW_ENABLE_TWO_PASS`, `GROUNDED_REVIEW_STRICT_COVERAGE`, `GROUNDED_REVIEW_MAX_*`, `GROUNDED_REVIEW_NUM_CTX*`.
+- PR **diff preview** (no Ollama) and optional **`review-diff`** (local Ollama) are documented above; they reinforce “changed files + triage” rather than full-repo guarantees.
+- `.env.local` is git-ignored and auto-seeded for `SEARXNG_SECRET_KEY` / `N8N_ENCRYPTION_KEY` on first bootstrap.
 - Default model is `qwen2.5:14b` in `deploy/local-ai/.env.local`.
 
 ## n8n → Ollama check

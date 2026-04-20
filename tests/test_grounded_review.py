@@ -1,11 +1,13 @@
 import unittest
 from pathlib import Path
 import importlib.util
+import subprocess
 import sys
 import types
 import tempfile
 import os
 import time
+from unittest.mock import patch
 
 
 if "requests" not in sys.modules:
@@ -174,6 +176,141 @@ class GroundedReviewTests(unittest.TestCase):
                 grounded_review.CACHE_FILE_PATH = old_cache
                 grounded_review.CACHE_TTL_SECONDS = old_ttl
                 grounded_review.ANSWER_CACHE_TTL_SECONDS = old_answer_ttl
+
+    def test_scope_note_includes_coverage_and_map_status(self):
+        snapshot = {
+            "coverage": {
+                "total_files": 100,
+                "total_bytes": 10000,
+                "analyzed_files": 10,
+                "analyzed_bytes": 1200,
+                "approx_input_tokens_hint": 400,
+                "repo_files_by_category": {"app": 40, "tests": 20},
+                "selected_files_by_category": {"app": 3, "tests": 2},
+                "revision_sha": "abcdef1234567890",
+            }
+        }
+        note = grounded_review.build_scope_note(snapshot, "used")
+        self.assertIn("priority-guided triage", note)
+        self.assertIn("10/100 files", note)
+        self.assertIn("Two-pass map status: used", note)
+        self.assertIn("Approx. evidence scale", note)
+        self.assertIn("Category snapshot", note)
+        self.assertIn("answer cache", note.lower())
+
+    def test_scope_note_explains_map_fallback(self):
+        snapshot = {"coverage": {"total_files": 10, "total_bytes": 1000, "analyzed_files": 2, "analyzed_bytes": 200}}
+        note = grounded_review.build_scope_note(snapshot, "fallback_map_json_parse_error")
+        self.assertIn("not applied", note)
+
+    def test_run_map_review_skips_when_no_files(self):
+        digest, status = grounded_review.run_map_review(
+            "review",
+            {"files": [], "owner": "o", "repo": "r", "default_branch": "main"},
+            model="m",
+            ollama_base_url="http://localhost:11434",
+        )
+        self.assertEqual(digest, "")
+        self.assertEqual(status, "skipped_no_files")
+
+    def test_run_map_review_json_fallback_status(self):
+        snapshot = {
+            "files": [grounded_review.RepoFile(path="a.py", content="x", size=1)],
+            "owner": "o",
+            "repo": "r",
+            "default_branch": "main",
+        }
+        with patch.object(grounded_review, "run_ollama_review", return_value="not-json"):
+            digest, status = grounded_review.run_map_review(
+                "review",
+                snapshot,
+                model="m",
+                ollama_base_url="http://localhost:11434",
+            )
+        self.assertEqual(digest, "")
+        self.assertEqual(status, "fallback_map_json_parse_error")
+
+    def test_answer_cache_key_includes_revision_sha(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_path = grounded_review.CACHE_FILE_PATH
+            grounded_review.CACHE_FILE_PATH = Path(tmp) / "cache.json"
+            grounded_review.ANSWER_CACHE_TTL_SECONDS = 3600
+            try:
+                p1 = {"success": True, "answer": "one", "sources": []}
+                p2 = {"success": True, "answer": "two", "sources": []}
+                grounded_review.set_cached_answer(
+                    "o", "r", "q", "m", p1, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                )
+                grounded_review.set_cached_answer(
+                    "o", "r", "q", "m", p2, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                )
+                self.assertEqual(
+                    grounded_review.get_cached_answer(
+                        "o", "r", "q", "m", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    )["answer"],
+                    "one",
+                )
+                self.assertEqual(
+                    grounded_review.get_cached_answer(
+                        "o", "r", "q", "m", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    )["answer"],
+                    "two",
+                )
+                self.assertIsNone(
+                    grounded_review.get_cached_answer(
+                        "o", "r", "q", "m", "cccccccccccccccccccccccccccccccccccccccc"
+                    )
+                )
+            finally:
+                grounded_review.CACHE_FILE_PATH = old_path
+
+    def test_git_diff_paths_lists_changed_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "config", "user.email", "t@example.com"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repo), "config", "user.name", "test"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(["git", "-C", str(repo), "branch", "-M", "main"], check=True, capture_output=True)
+            (repo / "a.txt").write_text("a", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "commit", "-m", "init"],
+                check=True,
+                capture_output=True,
+            )
+            (repo / "b.txt").write_text("b", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "commit", "-m", "add b"],
+                check=True,
+                capture_output=True,
+            )
+            base = subprocess.check_output(
+                ["git", "-C", str(repo), "rev-parse", "HEAD~1"],
+                text=True,
+            ).strip()
+            head = subprocess.check_output(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"],
+                text=True,
+            ).strip()
+            paths = grounded_review.git_diff_paths(repo, base, head)
+            self.assertIn("b.txt", paths)
+            snap = grounded_review.fetch_local_diff_snapshot(repo, "review diff", base, head)
+            self.assertIsNotNone(snap)
+            assert snap is not None
+            self.assertEqual(snap["coverage"].get("diff_paths_count"), 1)
+            md = grounded_review.format_diff_preview_markdown(snap, base, head)
+            self.assertIn("b.txt", md)
+            self.assertIn("no llm", md.lower())
 
 
 if __name__ == "__main__":

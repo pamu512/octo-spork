@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import configparser
+import importlib.util
 import os
 import platform
 import re
@@ -387,19 +388,90 @@ def _env_file_from_arg(raw_path: str | None) -> Path:
     return candidate
 
 
+def _load_grounded_review():
+    spec = importlib.util.spec_from_file_location("grounded_review", OVERLAY_SOURCE)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Could not load grounded_review module")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _repo_path_from_arg(raw: str) -> Path:
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    return path.resolve()
+
+
+def command_diff_preview(repo: str, base: str, head: str, query: str) -> None:
+    gr = _load_grounded_review()
+    repo_path = _repo_path_from_arg(repo)
+    snapshot = gr.fetch_local_diff_snapshot(repo_path, query, base, head)
+    if snapshot is None:
+        raise RuntimeError(
+            "Could not build a diff snapshot. Use a git checkout where base and head resolve."
+        )
+    _print(gr.format_diff_preview_markdown(snapshot, base, head))
+
+
+def command_review_diff(env_file: Path, repo: str, base: str, head: str, query: str) -> None:
+    _ensure_env_file(env_file)
+    env_values = _parse_env_file(env_file)
+    ollama_url = (env_values.get("OLLAMA_LOCAL_URL") or env_values.get("OLLAMA_BASE_URL") or "").strip()
+    if not ollama_url:
+        ollama_url = "http://127.0.0.1:11434"
+    ollama_url = ollama_url.rstrip("/")
+    model = env_values.get("OLLAMA_MODEL", "qwen2.5:14b").strip() or "qwen2.5:14b"
+
+    gr = _load_grounded_review()
+    repo_path = _repo_path_from_arg(repo)
+    result = gr.grounded_local_diff_review(query, model, ollama_url, repo_path, base, head)
+    if not result.get("success"):
+        raise RuntimeError(str(result.get("answer", "Grounded diff review failed")))
+    _print(str(result.get("answer", "")))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Cross-platform local AI stack runner")
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name in ("bootstrap", "up", "verify", "down"):
         sub = subparsers.add_parser(name)
         sub.add_argument("--env-file", dest="env_file", default=None, help="Path to .env.local")
+
+    diff_prev = subparsers.add_parser(
+        "diff-preview",
+        help="Print a markdown diff triage preview (no Ollama; safe for GitHub-hosted CI)",
+    )
+    diff_prev.add_argument("--repo", default=".", help="Path to git repository root")
+    diff_prev.add_argument("--base", required=True, help="Git base ref (e.g. origin/main or SHA)")
+    diff_prev.add_argument("--head", default="HEAD", help="Git head ref (default HEAD)")
+    diff_prev.add_argument(
+        "--query",
+        default="Review the changed files for security, correctness, and regression risks.",
+        help="Triage query passed to file selection",
+    )
+
+    rev_diff = subparsers.add_parser(
+        "review-diff",
+        help="Run grounded LLM review over files touched between base and head (requires Ollama)",
+    )
+    rev_diff.add_argument("--env-file", dest="env_file", default=None, help="Path to .env.local")
+    rev_diff.add_argument("--repo", default=".", help="Path to git repository root")
+    rev_diff.add_argument("--base", required=True, help="Git base ref")
+    rev_diff.add_argument("--head", default="HEAD", help="Git head ref (default HEAD)")
+    rev_diff.add_argument(
+        "--query",
+        default="Perform a grounded code review of the diff; focus on security and regressions.",
+        help="Review prompt",
+    )
     return parser
 
 
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    env_file = _env_file_from_arg(args.env_file)
+    env_file = _env_file_from_arg(getattr(args, "env_file", None))
 
     try:
         if args.command == "bootstrap":
@@ -410,6 +482,10 @@ def main() -> int:
             command_verify(env_file)
         elif args.command == "down":
             command_down(env_file)
+        elif args.command == "diff-preview":
+            command_diff_preview(args.repo, args.base, args.head, args.query)
+        elif args.command == "review-diff":
+            command_review_diff(env_file, args.repo, args.base, args.head, args.query)
         else:
             parser.error(f"Unknown command: {args.command}")
     except subprocess.CalledProcessError as exc:
