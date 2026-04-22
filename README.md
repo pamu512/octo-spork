@@ -1,4 +1,4 @@
-# Local AI Stack (XDA-style) on Docker
+# Local AI Stack on Docker
 
 Docker-first stack: **Ollama on the host**, **AgenticSeek** (UI + API + SearXNG + Redis), **Open WebUI**, and **n8n**.
 
