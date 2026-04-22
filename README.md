@@ -118,4 +118,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — permissive OSS: **free to use** for personal or commercial projects, including modification and redistribution; keep the copyright and permission notice with copies you distribute.
