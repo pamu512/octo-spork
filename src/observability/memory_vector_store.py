@@ -135,7 +135,12 @@ def _ollama_embed(text: str, ollama_base_url: str, model: str) -> list[float]:
 
 
 class VectorMemory:
-    """Chunked embeddings via local Ollama; persistent Chroma collection ``octo_memory``."""
+    """Chunked embeddings via local Ollama; persistent Chroma collection ``octo_memory``.
+
+    Each chunk stores ``is_verified`` metadata: ``True`` only when the remediation
+    :class:`remediation.rescan_loop.RescanLoop` passed for that ingestion (see ``rescan_loop_passed``).
+    Queries return **verified** chunks only (``where is_verified == True``).
+    """
 
     def __init__(
         self,
@@ -166,6 +171,7 @@ class VectorMemory:
         query: str,
         answer_markdown: str,
         review_model: str,
+        rescan_loop_passed: bool = False,
     ) -> list[str]:
         """Chunk findings and fixes, embed with Ollama, upsert into Chroma. Returns inserted ids."""
         findings_text, fixes_text = split_findings_and_fixes(answer_markdown)
@@ -173,6 +179,7 @@ class VectorMemory:
         embeddings: list[list[float]] = []
         documents: list[str] = []
         metadatas: list[dict[str, Any]] = []
+        verified = bool(rescan_loop_passed)
 
         for kind, body in (("findings", findings_text), ("fixes", fixes_text)):
             if not body.strip():
@@ -197,12 +204,35 @@ class VectorMemory:
                         "chunk_index": idx,
                         "query_head": query[:512],
                         "review_model": review_model[:128],
+                        "is_verified": verified,
                     }
                 )
 
         if ids:
             self._collection.upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
         return ids
+
+    def add_memory(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        revision_sha: str,
+        query: str,
+        answer_markdown: str,
+        review_model: str,
+        rescan_loop_passed: bool = False,
+    ) -> list[str]:
+        """Persist review chunks; sets ``is_verified`` only when *rescan_loop_passed* is ``True``."""
+        return self.index_review(
+            owner=owner,
+            repo=repo,
+            revision_sha=revision_sha,
+            query=query,
+            answer_markdown=answer_markdown,
+            review_model=review_model,
+            rescan_loop_passed=rescan_loop_passed,
+        )
 
     def upsert_review(
         self,
@@ -213,6 +243,7 @@ class VectorMemory:
         query: str,
         answer_markdown: str,
         review_model: str,
+        rescan_loop_passed: bool = False,
     ) -> str:
         """Backward-compatible alias: returns first chunk id (or empty string)."""
         out = self.index_review(
@@ -222,14 +253,20 @@ class VectorMemory:
             query=query,
             answer_markdown=answer_markdown,
             review_model=review_model,
+            rescan_loop_passed=rescan_loop_passed,
         )
         return out[0] if out else ""
+
+    def query_memory(self, query_text: str, k: int = 5) -> list[dict[str, Any]]:
+        """Retrieve similar chunks that were verified by a passing RescanLoop (``is_verified=True`` only)."""
+        return self.similar_findings(query_text, k=k)
 
     def similar_findings(self, query_text: str, k: int = 5) -> list[dict[str, Any]]:
         emb = self.embed(query_text.strip() or " ")
         res = self._collection.query(
             query_embeddings=[emb],
             n_results=max(1, min(k, 50)),
+            where={"is_verified": True},
             include=["documents", "metadatas", "distances"],
         )
         ids = res.get("ids") or []
@@ -257,6 +294,7 @@ class VectorMemory:
                     "revision_sha": str(m.get("revision_sha") or ""),
                     "query_head": str(m.get("query_head") or ""),
                     "kind": kind,
+                    "is_verified": bool(m.get("is_verified")),
                     "excerpt": str(drow or "")[:1500],
                     "distance": dist,
                 }
@@ -280,6 +318,7 @@ class VectorMemory:
 
 
 MemoryVectorStore = VectorMemory
+MemoryManager = VectorMemory
 
 
 def attach_similar_historical_findings(
@@ -299,7 +338,7 @@ def attach_similar_historical_findings(
     repo = str(snapshot.get("repo") or "unknown")
     qtext = f"{query}\n\nRepository context: {owner}/{repo}"
     try:
-        hits = store.similar_findings(qtext, k=int(os.environ.get("OCTO_VECTOR_MEMORY_TOP_K") or "5"))
+        hits = store.query_memory(qtext, k=int(os.environ.get("OCTO_VECTOR_MEMORY_TOP_K") or "5"))
     except Exception as exc:
         _LOG.debug("vector memory: similarity query failed: %s", exc)
         return
@@ -346,6 +385,7 @@ def index_successful_grounded_review(
     repo = str(snap.get("repo") or "unknown")
     rev_raw = snap.get("revision_sha") or (snap.get("coverage") or {}).get("revision_sha")
     revision_sha = str(rev_raw).strip()[:40] if rev_raw else ""
+    rescan_passed = bool(result.get("rescan_loop_passed")) or bool(snap.get("rescan_loop_passed"))
     try:
         store = VectorMemory(ollama_base_url=ollama_base_url)
         store.index_review(
@@ -355,6 +395,7 @@ def index_successful_grounded_review(
             query=query,
             answer_markdown=answer,
             review_model=model,
+            rescan_loop_passed=rescan_passed,
         )
     except Exception as exc:
         _LOG.debug("vector memory: index failed: %s", exc)

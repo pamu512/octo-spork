@@ -1,8 +1,18 @@
 """Remediation PR workflow for ``/octo-spork fix`` PR comments.
 
 Clones the repository, checks out a branch from the PR head, runs the local Claude Code agent
-via Docker Compose (same stack as ``local_ai_stack``), pushes ``octo-fix/pr-<n>``, and opens a
-linked remediation pull request with an agent transcript.
+via Docker Compose (same stack as ``local_ai_stack``), then — when verification is enabled —
+runs :class:`remediation.rescan_loop.RescanLoop` until **Clean** before committing. After three
+failed attempts, posts a **System Warning** comment instead of opening a remediation PR.
+
+Environment:
+
+- ``OCTO_FIX_VERIFY_ENABLED`` — ``0`` / ``false`` to skip RescanLoop (default: on).
+- ``OCTO_FIX_VERIFY_CVE`` — CVE id to clear (e.g. ``CVE-2024-12345``); otherwise first CVE in the brief.
+- ``OCTO_FIX_VERIFY_MAX_ATTEMPTS`` — default ``3``.
+- **Latency logger** — :mod:`observability.latency_success_logger` records **Scan Start** (run begin)
+  through **Verified Patch** (RescanLoop clean) in ``.local/latency_success.db``. Slow verified TTR
+  triggers **context reset** (see ``OCTO_REMEDIATION_SLOW_TTR_SEC``, ``OCTO_CONTEXT_RESET_DISABLE``).
 """
 
 from __future__ import annotations
@@ -16,8 +26,10 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +38,136 @@ from github import Auth, Github
 from github_bot.git_manager import build_grounded_pull_request
 
 _LOG = logging.getLogger(__name__)
+
+CVE_INLINE_RE = re.compile(r"\b(CVE-\d{4}-\d+)\b", re.IGNORECASE)
+
+
+def _record_remediation_latency(
+    *,
+    scan_start: float,
+    pr_html_url: str,
+    cve_id: str,
+    outcome: str,
+    success_verified_patch: bool,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """Persist Scan Start → event latency; may trigger context reset if verified TTR is slow."""
+    try:
+        from observability.latency_success_logger import (
+            RemediationLatencyRow,
+            log_remediation_latency,
+            maybe_trigger_context_reset_for_ttr,
+        )
+    except ImportError:
+        return
+    end = time.time()
+    ttr = max(0.0, end - scan_start)
+    row = RemediationLatencyRow(
+        created_at_utc=datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        scan_start_unix=scan_start,
+        event_end_unix=end,
+        ttr_seconds=ttr,
+        success_verified_patch=success_verified_patch,
+        outcome=outcome,
+        pr_html_url=pr_html_url[:2048],
+        cve_id=cve_id[:128],
+        extra=dict(extra or {}),
+    )
+    try:
+        log_remediation_latency(row)
+    except OSError as exc:
+        _LOG.debug("remediation latency log skipped: %s", exc)
+    maybe_trigger_context_reset_for_ttr(
+        ttr_seconds=ttr,
+        success_verified_patch=success_verified_patch,
+        repo_root=octo_spork_repo_root(),
+    )
+
+
+def extract_cve_for_fix_verification(text: str) -> str:
+    """Return the first CVE-id mentioned in *text*, uppercased, or empty string if none."""
+    m = CVE_INLINE_RE.search(text or "")
+    return m.group(1).upper() if m else ""
+
+
+def format_system_warning_verification_failed(
+    *,
+    original_html: str,
+    pr_number: int,
+    max_attempts: int,
+    last_detail: str,
+) -> str:
+    """Markdown body for the PR comment when RescanLoop never reaches Clean."""
+    detail = (last_detail or "").strip()
+    if len(detail) > 6000:
+        detail = detail[:5900] + "\n\n… _(truncated)_\n"
+    detail_display = detail if detail else "(no detail captured)"
+    try:
+        from github_bot.negative_reinforcement import negative_reinforcement_markdown_section
+
+        nr_block = negative_reinforcement_markdown_section(validation_error=detail_display)
+    except ImportError:
+        nr_block = ""
+    return (
+        "## System Warning — remediation verification failed\n\n"
+        "The automated fix pipeline **did not reach a Clean status** from `RescanLoop` "
+        f"after **{max_attempts}** attempt(s): patch validation and/or Trivy CVE rescan did not pass.\n\n"
+        "**The agent was unable to produce a verified solution.** "
+        f"No remediation pull request was opened for [{original_html}]({original_html}).\n\n"
+        "### Last verification detail\n\n"
+        "```text\n"
+        f"{detail_display}\n"
+        "```\n"
+        + (f"\n{nr_block}" if nr_block else "")
+    )
+
+
+def _run_rescan_verification(
+    clone_dir: Path,
+    *,
+    agent_diff: str,
+    cve_id: str,
+    max_attempts: int,
+) -> tuple[bool, str]:
+    """Run :class:`remediation.rescan_loop.RescanLoop` up to *max_attempts* times.
+
+    Returns ``(True, \"\")`` when a run reaches **Clean**
+    (:attr:`~remediation.validator.PatchValidationResult.clean`).
+    Otherwise ``(False, last_error_detail)``.
+    """
+    from remediation.exceptions import VerificationFailedError
+    from remediation.rescan_loop import RescanLoop
+    from remediation.validator import PatchValidator
+
+    rv_root = (os.environ.get("OCTO_PATCH_VERIFY_ROOT") or "").strip()
+    validator = (
+        PatchValidator(clone_dir, verify_root=Path(rv_root).expanduser().resolve())
+        if rv_root
+        else PatchValidator(clone_dir)
+    )
+    loop = RescanLoop(validator, cve_id)
+    last_note = ""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = loop.run(agent_diff)
+            if result.clean:
+                return True, ""
+            last_note = result.stderr or "git apply did not succeed (non-clean RescanLoop result)"
+        except VerificationFailedError as exc:
+            last_note = ((str(exc) + "\n" + (exc.snippet or "")).strip())[:8000]
+        except Exception as exc:  # noqa: BLE001 -- aggregate failures for PR comment
+            last_note = f"{type(exc).__name__}: {exc}"[:8000]
+        _LOG.warning(
+            "fix-it RescanLoop attempt %s/%s did not reach Clean: %s",
+            attempt,
+            max_attempts,
+            last_note[:500],
+        )
+    return False, last_note
+
 
 PR_HTML_URL_RE = re.compile(
     r"https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<num>\d+)",
@@ -317,6 +459,8 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
     if not isinstance(pr_html_url, str) or not pr_html_url.strip():
         raise ValueError("envelope missing pr_html_url")
 
+    scan_start = time.time()
+    cve_id_for_log = ""
     owner, repo_name, pr_number = parse_pr_html_url(pr_html_url)
     token = _github_token()
     repo_root = octo_spork_repo_root()
@@ -331,7 +475,19 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
     original_html = pull.html_url
 
     fix_branch = f"{DEFAULT_BRANCH_PREFIX}{pr_number}"
-    max_ctx = int(os.environ.get("OCTO_FIX_CONTEXT_MAX_CHARS", "120000"))
+    default_max_ctx = int(os.environ.get("OCTO_FIX_CONTEXT_MAX_CHARS", "120000"))
+    try:
+        from observability.latency_success_logger import aggressive_prune_effective_max_chars
+
+        max_ctx = aggressive_prune_effective_max_chars(default_max_ctx, repo_root=repo_root)
+    except ImportError:
+        max_ctx = default_max_ctx
+    if max_ctx < default_max_ctx:
+        _LOG.info(
+            "Remediation brief capped by aggressive prune: %s chars (default_max=%s)",
+            max_ctx,
+            default_max_ctx,
+        )
 
     grounded = build_grounded_pull_request(
         owner,
@@ -358,6 +514,10 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
             "",
             llm_blob,
         ]
+    )
+
+    cve_id_for_log = (os.environ.get("OCTO_FIX_VERIFY_CVE") or "").strip() or extract_cve_for_fix_verification(
+        brief_doc,
     )
 
     env_file, agenticseek_path = resolve_compose_paths(repo_root)
@@ -400,6 +560,13 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
                 f"git checkout failed: {(checkout.stderr or checkout.stdout or '').strip()[:4000]}"
             )
 
+        head_proc = _git(["rev-parse", "HEAD"], cwd=clone_dir, timeout=30)
+        if head_proc.returncode != 0:
+            raise RuntimeError(
+                f"git rev-parse HEAD failed: {(head_proc.stderr or head_proc.stdout or '').strip()[:2000]}"
+            )
+        pr_head_sha = (head_proc.stdout or "").strip()
+
         (clone_dir / "OCTO_REMEDIATION_BRIEF.md").write_text(brief_doc, encoding="utf-8")
 
         timeout_sec = int(os.environ.get("OCTO_FIX_CLAUDE_TIMEOUT_SEC", "3600"))
@@ -425,6 +592,13 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
             except OSError:
                 pass
 
+        diff_proc = _git(["diff", pr_head_sha], cwd=clone_dir, timeout=120)
+        agent_diff = diff_proc.stdout or ""
+        if diff_proc.returncode != 0:
+            raise RuntimeError(
+                f"git diff failed: {(diff_proc.stderr or diff_proc.stdout or '').strip()[:2000]}"
+            )
+
         st = _git(["status", "--porcelain"], cwd=clone_dir, timeout=60)
         if st.returncode != 0:
             raise RuntimeError("git status failed in clone.")
@@ -437,7 +611,55 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
                 + trace_body[:60000]
             )
             _post_pr_comment(owner, repo_name, pr_number, body, token)
+            _record_remediation_latency(
+                scan_start=scan_start,
+                pr_html_url=original_html,
+                cve_id=cve_id_for_log,
+                outcome="no_agent_diff",
+                success_verified_patch=False,
+                extra={"agent_exit_code": code},
+            )
             return
+
+        verify_on = os.environ.get("OCTO_FIX_VERIFY_ENABLED", "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }
+        cve_for_verify = cve_id_for_log
+        max_verify_attempts = max(1, int(os.environ.get("OCTO_FIX_VERIFY_MAX_ATTEMPTS", "3")))
+        verified_patch_reached = False
+        if verify_on and cve_for_verify and agent_diff.strip():
+            clean, last_note = _run_rescan_verification(
+                clone_dir,
+                agent_diff=agent_diff,
+                cve_id=cve_for_verify,
+                max_attempts=max_verify_attempts,
+            )
+            if not clean:
+                warn_body = format_system_warning_verification_failed(
+                    original_html=original_html,
+                    pr_number=pr_number,
+                    max_attempts=max_verify_attempts,
+                    last_detail=last_note,
+                )
+                _post_pr_comment(owner, repo_name, pr_number, warn_body, token)
+                _record_remediation_latency(
+                    scan_start=scan_start,
+                    pr_html_url=original_html,
+                    cve_id=cve_id_for_log,
+                    outcome="verification_failed",
+                    success_verified_patch=False,
+                    extra={"detail_head": (last_note or "")[:500]},
+                )
+                return
+            verified_patch_reached = True
+        elif verify_on and not cve_for_verify:
+            _LOG.warning(
+                "OCTO_FIX_VERIFY_ENABLED but no CVE id (set OCTO_FIX_VERIFY_CVE or mention CVE in brief); "
+                "skipping RescanLoop — posting remediation without CVE verification.",
+            )
 
         ident_name = (os.environ.get("OCTO_FIX_GIT_USER_NAME") or "octo-spork bot").strip()
         ident_email = (
@@ -461,6 +683,14 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
                 + trace_body[:60000]
             )
             _post_pr_comment(owner, repo_name, pr_number, body, token)
+            _record_remediation_latency(
+                scan_start=scan_start,
+                pr_html_url=original_html,
+                cve_id=cve_id_for_log,
+                outcome="empty_index_after_stage",
+                success_verified_patch=False,
+                extra={"agent_exit_code": code},
+            )
             return
 
         commit = _git(
@@ -517,6 +747,28 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
             f"_Branch `{fix_branch}` pushed; agent exit code `{code}`._",
             token,
         )
+        _record_remediation_latency(
+            scan_start=scan_start,
+            pr_html_url=original_html,
+            cve_id=cve_id_for_log,
+            outcome="verified_patch" if verified_patch_reached else "remediation_pr_without_verified_scan",
+            success_verified_patch=verified_patch_reached,
+            extra={
+                "remediation_pr_url": remed_html,
+                "fix_branch": fix_branch,
+                "agent_exit_code": code,
+            },
+        )
+    except Exception as exc:
+        _record_remediation_latency(
+            scan_start=scan_start,
+            pr_html_url=original_html,
+            cve_id=cve_id_for_log,
+            outcome=f"error:{type(exc).__name__}",
+            success_verified_patch=False,
+            extra={"message": str(exc)[:1200]},
+        )
+        raise
     finally:
         shutil.rmtree(clone_dir, ignore_errors=True)
 

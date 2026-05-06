@@ -94,7 +94,7 @@ class PromptGeneratorTests(unittest.TestCase):
         os.environ["OCTO_VECTOR_MEMORY"] = "1"
         os.environ["OLLAMA_BASE_URL"] = "http://127.0.0.1:11434"
         fake_store = MagicMock()
-        fake_store.similar_findings.return_value = [
+        fake_store.query_memory.return_value = [
             {
                 "repo_full": "acme/api",
                 "excerpt": "SQL injection risk in auth handler.",
@@ -143,8 +143,8 @@ class PromptGeneratorTests(unittest.TestCase):
             user,
         )
         self.assertIn("SQL injection risk", user)
-        fake_store.similar_findings.assert_called_once()
-        _args, kwargs = fake_store.similar_findings.call_args
+        fake_store.query_memory.assert_called_once()
+        _args, kwargs = fake_store.query_memory.call_args
         self.assertEqual(kwargs.get("k"), 3)
         self.assertIn("myorg/svc", _args[0])
 

@@ -38,7 +38,7 @@ class MemoryVectorStoreTests(unittest.TestCase):
         os.environ["OCTO_VECTOR_MEMORY"] = "1"
 
         fake_store = mock.Mock()
-        fake_store.similar_findings.return_value = [
+        fake_store.query_memory.return_value = [
             {
                 "repo_full": "o/r",
                 "revision_sha": "abcd1234ef",
@@ -115,6 +115,45 @@ class MemoryVectorStoreTests(unittest.TestCase):
         chunks = mvs.chunk_text(body, max_chars=50, overlap=5)
         self.assertGreater(len(chunks), 1)
         self.assertTrue(all(len(c) <= 50 for c in chunks))
+
+    def test_query_memory_uses_verified_where_filter(self) -> None:
+        from observability import memory_vector_store as mvs
+
+        store = mvs.VectorMemory(ollama_base_url="http://127.0.0.1:11434")
+        mock_coll = mock.Mock()
+        mock_coll.query.return_value = {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
+        store._collection = mock_coll
+        with mock.patch.object(store, "embed", return_value=[0.0, 1.0]):
+            store.query_memory("hello", k=3)
+        mock_coll.query.assert_called_once()
+        call_kw = mock_coll.query.call_args.kwargs
+        self.assertEqual(call_kw.get("where"), {"is_verified": True})
+
+    def test_add_memory_sets_is_verified_from_rescan_flag(self) -> None:
+        from observability import memory_vector_store as mvs
+
+        store = mvs.VectorMemory(ollama_base_url="http://127.0.0.1:11434")
+        mock_coll = mock.Mock()
+        store._collection = mock_coll
+        with (
+            mock.patch.object(store, "embed", return_value=[0.1]),
+            mock.patch(
+                "observability.memory_vector_store.chunk_text",
+                return_value=["chunk"],
+            ),
+        ):
+            store.add_memory(
+                owner="o",
+                repo="r",
+                revision_sha="abc",
+                query="q",
+                answer_markdown="# X\n\n## Fixes\n\nfix\n",
+                review_model="m",
+                rescan_loop_passed=True,
+            )
+        mock_coll.upsert.assert_called_once()
+        meta = mock_coll.upsert.call_args.kwargs["metadatas"]
+        self.assertTrue(all(m.get("is_verified") is True for m in meta))
 
 
 if __name__ == "__main__":

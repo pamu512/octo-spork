@@ -329,23 +329,12 @@ def resolve_background_review_model(
     tooling_root: Path | None = None,
     ollama_base_url: str | None = None,
 ) -> str:
-    """Model for unattended PR reviews: explicit env → profile winner → ``OLLAMA_MODEL`` fallback."""
-    explicit = (os.environ.get("OCTO_BACKGROUND_REVIEW_MODEL") or "").strip()
-    if explicit:
-        return explicit
+    """Model for unattended PR reviews: explicit env → profile winner → ``OLLAMA_MODEL`` fallback.
 
-    default_model = (os.environ.get("OLLAMA_MODEL") or "qwen2.5:14b").strip() or "qwen2.5:14b"
-    if _truthy("OCTO_PERF_PROFILE_DISABLE"):
-        return default_model
-
-    data = load_performance_profile(tooling_root)
-    if not isinstance(data, dict):
-        return default_model
-
-    winner = data.get("most_stable_model")
-    if not isinstance(winner, str) or not winner.strip():
-        return default_model
-
+    On macOS, :class:`infra.vram_pressure_monitor.VRAMPressureMonitor` may downgrade 14B/32B-class
+    picks to ``qwen2.5-coder:7b`` (override via ``OCTO_UNIFIED_MEMORY_PRESSURE_MODEL``) when
+    ``system_profiler SPDisplaysDataType`` reports **Unified Memory** pressure **High**.
+    """
     base = (
         (ollama_base_url or "").strip()
         or (os.environ.get("OLLAMA_LOCAL_URL") or "").strip()
@@ -360,14 +349,37 @@ def resolve_background_review_model(
     except Exception:
         local = []
 
-    if model_available_locally(winner.strip(), local):
-        return winner.strip()
+    explicit = (os.environ.get("OCTO_BACKGROUND_REVIEW_MODEL") or "").strip()
+    default_model = (os.environ.get("OLLAMA_MODEL") or "qwen2.5:14b").strip() or "qwen2.5:14b"
 
-    _LOG.warning(
-        "performance profile most_stable_model %r not in local Ollama tags; using OLLAMA_MODEL",
-        winner,
-    )
-    return default_model
+    if explicit:
+        candidate = explicit
+    elif _truthy("OCTO_PERF_PROFILE_DISABLE"):
+        candidate = default_model
+    else:
+        data = load_performance_profile(tooling_root)
+        if not isinstance(data, dict):
+            candidate = default_model
+        else:
+            winner = data.get("most_stable_model")
+            if not isinstance(winner, str) or not winner.strip():
+                candidate = default_model
+            elif model_available_locally(winner.strip(), local):
+                candidate = winner.strip()
+            else:
+                _LOG.warning(
+                    "performance profile most_stable_model %r not in local Ollama tags; using OLLAMA_MODEL",
+                    winner,
+                )
+                candidate = default_model
+
+    try:
+        from infra.vram_pressure_monitor import apply_unified_memory_pressure_override
+
+        out, _reason = apply_unified_memory_pressure_override(candidate, local)
+        return out
+    except ImportError:
+        return candidate
 
 
 def configure_benchmark_models_args(p: Any) -> None:

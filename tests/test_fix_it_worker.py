@@ -16,6 +16,31 @@ if str(SRC) not in sys.path:
 
 
 class FixItWorkerTests(unittest.TestCase):
+    def test_extract_cve_for_fix_verification(self) -> None:
+        from github_bot.fix_it_worker import extract_cve_for_fix_verification
+
+        self.assertEqual(
+            extract_cve_for_fix_verification("Fix CVE-2024-12345 in lodash"),
+            "CVE-2024-12345",
+        )
+        self.assertEqual(extract_cve_for_fix_verification("no id here"), "")
+
+    def test_format_system_warning_contains_expected_sections(self) -> None:
+        from github_bot.fix_it_worker import format_system_warning_verification_failed
+
+        body = format_system_warning_verification_failed(
+            original_html="https://github.com/o/r/pull/1",
+            pr_number=1,
+            max_attempts=3,
+            last_detail="trivy failed",
+        )
+        self.assertIn("System Warning", body)
+        self.assertIn("unable to produce a verified solution", body)
+        self.assertIn("trivy failed", body)
+        self.assertIn("Negative reinforcement", body)
+        self.assertIn("Your previous attempt failed validation with error:", body)
+        self.assertIn("Do not repeat the previous logic.", body)
+
     def test_parse_pr_html_url(self) -> None:
         from github_bot.fix_it_worker import parse_pr_html_url
 

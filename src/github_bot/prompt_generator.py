@@ -227,7 +227,7 @@ class PromptGenerator:
             return ""
         try:
             store = VectorMemory(ollama_base_url=base)
-            hits = store.similar_findings(self._similarity_query_text(), k=3)
+            hits = store.query_memory(self._similarity_query_text(), k=3)
         except Exception:
             return ""
         if not hits:
