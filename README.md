@@ -1,121 +1,132 @@
-# Local AI Stack on Docker
+\\\\# 🐙🍴 Octo-Spork
 
-Docker-first stack: **Ollama on the host**, **AgenticSeek** (UI + API + SearXNG + Redis), **Open WebUI**, and **n8n**.
+**The Sovereign, Local-First AI Stack for Repo Hardening & Agentic Remediation.**
 
-## Table of contents
+Octo-Spork is a sophisticated "fopoon" (part-spoon, part-fork) architecture designed for solo developers and security-conscious engineers. It bridges the gap between high-latency, privacy-invasive cloud LLMs and the need for private, iterative, and deep repository reviews. 
 
-- [What this is](#what-this-is)
-- [Prerequisites](#prerequisites)
-- [Quick start](#quick-start)
-- [CLI commands](#cli-commands)
-- [Service endpoints](#service-endpoints)
-- [Grounded review](#grounded-review)
-- [Tests and CI](#tests-and-ci)
-- [Model and hardware](#model-and-hardware)
-- [Platform limitations](#platform-limitations)
-- [Runtime checks](#runtime-checks)
-- [Contributing](#contributing)
-- [License](#license)
+By orchestrating tools like Ollama, AgenticSeek, SearXNG, and Claude Code entirely on local hardware, Octo-Spork acts as your autonomous, privacy-first security engineer and code reviewer.
 
-## What this is
+---
 
-This repository is a **cross-platform runner** (Python + shell/PowerShell helpers) around `docker compose` profiles so you can bring up the same local AI lab on macOS, Linux, or Windows (with caveats below).
+## ⚡ Why Octo-Spork?
 
-## Prerequisites
+When building sensitive infrastructure (like fraud detection or CTI systems), shipping your codebase to a cloud LLM provider is a security risk. Octo-Spork brings the intelligence to your code, rather than sending your code to the intelligence. 
 
-- Docker Engine or Docker Desktop with `docker compose`
-- Ollama on the host
-- Python 3.10+ on the host
+It solves the "local AI fatigue" problem through aggressive VRAM management, automated orchestrations, and long-term agentic memory, allowing you to run 30B+ parameter models on consumer hardware without system crashes.
 
-## Quick start
+---
 
-```bash
-cp deploy/local-ai/.env.example deploy/local-ai/.env.local
-python3 -m local_ai_stack up --env-file deploy/local-ai/.env.local
-python3 -m local_ai_stack verify --env-file deploy/local-ai/.env.local
+## 🏗️ Core Architecture
+
+Octo-Spork is built on an Infrastructure-as-Code philosophy, managing a multi-container stack via a Python orchestrator:
+
+*   **Brain:** Ollama (serving Llama 3.2, Qwen 3)
+*   **Orchestration & Workflow:** n8n, AgenticSeek (Langgraph-based)
+*   **Research & Grounding:** SearXNG (Strict Privacy Mode)
+*   **State & Memory:** Redis, PostgreSQL, ChromaDB
+*   **Remediation Engine:** Local containerized Claude Code
+*   **Security Integration:** Trivy, CodeQL
+
+---
+
+## ✨ Key Features
+
+### 🛡️ Grounded, Evidence-First Reviews
+Octo-Spork doesn't hallucinate feedback. It integrates directly with **Trivy** and **CodeQL** to scan the filesystem. Every AI-generated PR comment includes a "Grounded Receipt" with exact file paths and line numbers.
+
+### 🤖 Local GitHub PR Bot
+A local FastAPI webhook listener interacts with your repositories via a GitHub App integration. It fetches PR diffs, chunks them for local token windows, and posts professionally formatted, emoji-coded reviews back to GitHub—all from your local machine.
+
+### 🧠 Long-Term Sovereign Memory
+Octo-Spork remembers your coding style and past mistakes:
+*   **ChromaDB Vector Store:** Indexes past vulnerabilities to catch recurring "architectural debt."
+*   **Correction Ledger:** Learns from your manual PR comment overrides to adjust its future tone and strictness.
+*   **`CLAUDE.md` Sync:** Automatically reads and updates project-specific AI instructions.
+
+### ⚖️ VRAM Governor & Stability Engine
+Running large models locally is chaotic. Octo-Spork includes a `VRAMManager` that predicts memory usage, gracefully downgrades to smaller Coder models if VRAM is pinned, and utilizes a "Circuit Breaker" to prevent infinite agentic loops from locking up your hardware.
+
+### 🛠️ Agentic Self-Healing
+More than just a reviewer, Octo-Spork can fix the bugs it finds. Triggered via a `/octo-spork fix` PR comment, the stack spins up a sandboxed Claude Code environment to implement the fix, run local tests, and push a remediation branch.
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+*   Docker & Docker Compose v2
+*   Ollama installed locally (running on port 11434)
+*   Bun (for the Claude Code remediation engine)
+*   At least 16GB VRAM (24GB+ recommended for 30B+ models)
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/yourusername/octo-spork.git
+   cd octo-spork
+   
 ```
 
-Stop everything:
+2. **Configure Environment:**
+   ```bash
+   cp deploy/local-ai/.env.example deploy/local-ai/.env.local
+   # Edit .env.local to add your GitHub App Tokens, preferred Ollama models, etc.
+   ```
 
-```bash
-python3 -m local_ai_stack down --env-file deploy/local-ai/.env.local
+3. **Verify System Health:**
+   ```bash
+   python src/runner/local_ai_stack.py doctor
+   ```
+   *This performs a 10-point check on CPU/GPU compatibility, Docker memory limits, and PATH configurations.*
+
+4. **Launch the Stack:**
+   ```bash
+   python src/runner/local_ai_stack.py up
+   ```
+
+---
+
+## 💻 Usage Commands
+
+Octo-Spork is managed via its central Python runner.
+
+*   `python local_ai_stack.py up`: Staged rollout of the local containers (verifying VRAM and ports).
+*   `python local_ai_stack.py down --clean`: Graceful shutdown, volume pruning, and zombie-network cleanup.
+*   `python local_ai_stack.py status`: Outputs a Rich-formatted table of container health and pulled Ollama models.
+*   `python local_ai_stack.py verify`: Probes API health endpoints (Redis, Postgres, Ollama) and runs a dummy scan to ensure the grounding logic is working.
+*   `python local_ai_stack.py doctor --fix`: Auto-resolves OOM errors, resets GPU limits, and clears unused builder caches.
+
+---
+
+## 🔒 Privacy & Security
+
+Octo-Spork is designed to be completely air-gapped from cloud AI providers:
+*   **Outbound Request Guard:** Monitors and blocks containers from reaching external IPs during Local-Only mode.
+*   **PII Filter:** Strips repo names and sensitive data before routing queries to SearXNG.
+*   **Secret Scanner:** A high-speed regex pre-check runs before the LLM sees the code, preventing secrets from even entering the local context window.
+
+---
+
+## 📂 Project Structure
+```text
+octo-spork/
+├── deploy/
+│   ├── local-ai/            # Docker Compose files & overrides
+│   └── claude-code/         # Bun-based agentic remediation container
+├── src/
+│   ├── runner/              # Core orchestrator (local_ai_stack.py)
+│   ├── github_bot/          # FastAPI webhook listener & PR formatter
+│   ├── observability/       # OpenTelemetry tracing & TUI dashboard
+│   ├── infra/               # VRAM Manager, Circuit Breakers, Port Sentinels
+│   └── memory/              # ChromaDB Vector logic & Correction Ledger
+├── grounding/
+│   └── rules/               # Domain-specific markdown rules (e.g., CTI, Fraud)
+└── logs/                    # Automated log rotation & crash reports
 ```
 
-On **Windows PowerShell**, use the same `python3 -m local_ai_stack …` commands from the repo root, or the wrappers under `scripts/local-ai/*.ps1`. On Linux/macOS, optional wrappers live in `scripts/local-ai/*.sh`.
+---
 
-## CLI commands
-
-| Command | Purpose |
-|--------|---------|
-| `python3 -m local_ai_stack up` | Start stack (`--env-file` required) |
-| `python3 -m local_ai_stack verify` | Health checks |
-| `python3 -m local_ai_stack down` | Tear down |
-| `python3 -m local_ai_stack diff-preview --repo . --base <ref> --head <ref>` | Markdown diff triage preview (**no Ollama**); used in [PR diff preview](.github/workflows/pr-diff-preview.yml) |
-| `python3 -m local_ai_stack review-diff --env-file … --repo . --base <ref> --head <ref>` | Full grounded LLM review over the diff (**requires Ollama** per `.env.local`) |
-
-Bootstrap AgenticSeek once: `scripts/local-ai/bootstrap-agenticseek.sh` clones upstream into `.local/agenticseek` and points `config.ini` at Ollama.
-
-## Service endpoints
-
-| Service | URL |
-|--------|-----|
-| AgenticSeek UI | http://localhost:3010 |
-| AgenticSeek API | http://localhost:7777/health |
-| Open WebUI | http://localhost:3001 |
-| n8n | http://localhost:5678 |
-| SearXNG | http://localhost:8080 |
-
-## Grounded review
-
-GitHub “review this repo” flows use a **grounded** path: README plus a **heuristic, capped sample** of files (not a full audit). Output is **advisory** LLM text, not a merge gate.
-
-- **Defaults:** up to **12** files, **~220 KB** total evidence, **80 KB** per file excerpt (see `deploy/local-ai/.env.example`).
-- **Performance:** first answer is often **minutes**; repeat **identical** questions can hit a short **answer cache** (TTL + revision when SHA is known).
-- **Two-pass map:** best-effort JSON over up to **8** files; failures fall back to single-pass with a clear **map status** in the scope note.
-- **Tuning:** `GROUNDED_REVIEW_*` env vars (cache TTL, `ENABLE_TWO_PASS`, `STRICT_COVERAGE`, limits, `NUM_CTX`).
-
-Private or unreachable GitHub repos fall back to a clone under **`WORK_DIR`** (mounted at `/opt/workspace` in the backend).
-
-## Tests and CI
-
-**Local:**
-
-```bash
-python3 -m unittest tests.test_grounded_review -v
+## 🤝 Contributing
+As a tool built for sovereign development, forks and local modifications are highly encouraged. If you build a new MCP server integration or a better VRAM scheduling algorithm, please open a PR!
 ```
-
-**GitHub Actions:**
-
-| Workflow | When | What it does |
-|----------|------|----------------|
-| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Push / PR to `main` | Runs `tests.test_grounded_review` on Ubuntu |
-| [`.github/workflows/pr-diff-preview.yml`](.github/workflows/pr-diff-preview.yml) | Pull requests | Posts / updates a **diff preview** comment (no Ollama) |
-
-## Model and hardware
-
-| Model | Rough minimum | Typical use |
-|-------|----------------|-------------|
-| `qwen2.5:1.5b` | 8 GB RAM | Fast iteration |
-| `qwen2.5:7b` | 16 GB RAM | Balanced code review |
-| `qwen2.5:14b` | 32 GB RAM | Deeper analysis |
-
-Default in `.env.example` is `qwen2.5:14b`. A practical middle ground for many machines: **7b** and **~32 GB RAM**.
-
-## Platform limitations
-
-- **macOS Apple Silicon:** primary tested path; AgenticSeek backend may use `linux/amd64` for browser automation; Ollama stays on the host (Metal).
-- **Linux:** expect standard Docker; confirm `host.docker.internal` or add an explicit host gateway.
-- **Windows:** best-effort with **Docker Desktop + WSL2**; set `WORK_DIR` to a path Docker can mount.
-- **All:** GitHub API rate limits for remote snapshots; large repos leave most files unexamined by design.
-
-## Runtime checks
-
-`scripts/local-ai/verify.sh` runs checks from the stack (including n8n calling `GET $OLLAMA_BASE_URL/api/tags` expecting HTTP 200 and a model list).
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-[MIT](LICENSE) — permissive OSS: **free to use** for personal or commercial projects, including modification and redistribution; keep the copyright and permission notice with copies you distribute.
