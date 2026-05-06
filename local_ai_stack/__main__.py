@@ -58,6 +58,83 @@ def _print(message: str) -> None:
     print(message, flush=True)
 
 
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _pytest_available() -> bool:
+    """True if ``pytest`` is on PATH or ``python -m pytest`` works."""
+    if shutil.which("pytest"):
+        return True
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _codeql_cli_available() -> bool:
+    return bool(shutil.which("codeql"))
+
+
+def _trivy_cli_available() -> bool:
+    return bool(shutil.which("trivy"))
+
+
+def _missing_scan_dev_dependencies(*, require_trivy: bool) -> list[str]:
+    """Return human-readable labels for missing tools (pytest, trivy, codeql)."""
+    missing: list[str] = []
+    if not _pytest_available():
+        missing.append("pytest (`pip install pytest` or ensure `python -m pytest --version` works)")
+    if require_trivy and not _trivy_cli_available():
+        missing.append("trivy CLI (https://aquasecurity.github.io/trivy/latest/getting-started/installation/)")
+    if not _codeql_cli_available():
+        missing.append("codeql CLI (https://github.com/github/codeql-cli-binaries)")
+    return missing
+
+
+def _print_environment_incomplete(missing: list[str]) -> None:
+    lines = [
+        "",
+        "Environment Incomplete",
+        "",
+        "Required dev dependencies are missing:",
+        *[f"  - {item}" for item in missing],
+        "",
+        "Install the missing packages, ensure they are on PATH, then retry.",
+        "To bypass this check (not recommended): export OCTO_SKIP_DEV_DEP_CHECK=1",
+        "",
+    ]
+    print("\n".join(lines), file=sys.stderr)
+
+
+def _ensure_scan_dev_dependencies(args: argparse.Namespace) -> None:
+    """
+    Pre-flight for scan / remediation commands: require pytest, CodeQL CLI, and usually Trivy.
+
+    Honors ``OCTO_SKIP_DEV_DEP_CHECK=1``. For ``pre-push-scan``, Trivy is not required when
+    ``--skip-trivy`` is set.
+    """
+    if _truthy_env("OCTO_SKIP_DEV_DEP_CHECK"):
+        return
+    cmd = getattr(args, "command", None)
+    if cmd not in {"pre-push-scan", "review-diff", "remediation-ui", "benchmark"}:
+        return
+    require_trivy = True
+    if cmd == "pre-push-scan":
+        require_trivy = not bool(getattr(args, "skip_trivy", False))
+    missing = _missing_scan_dev_dependencies(require_trivy=require_trivy)
+    if missing:
+        _print_environment_incomplete(missing)
+        sys.exit(2)
+
+
 def _run(
     args: list[str],
     *,
@@ -3323,6 +3400,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    _ensure_scan_dev_dependencies(args)
     env_file = _env_file_from_arg(getattr(args, "env_file", None))
     example_override = _optional_example_file_from_arg(getattr(args, "example_file", None))
 
