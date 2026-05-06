@@ -1,0 +1,30 @@
+# Labels used by `python -m local_ai_stack force-clean` to find stack containers.
+# Value matches COMPOSE_PROJECT_NAME in local_ai_stack/__main__.py (--project-name).
+services:
+  redis:
+    labels:
+      com.octospork.project: octo-spork-local-ai
+  searxng:
+    labels:
+      com.octospork.project: octo-spork-local-ai
+  frontend:
+    labels:
+      com.octospork.project: octo-spork-local-ai
+  backend:
+    labels:
+      com.octospork.project: octo-spork-local-ai
+  postgres:
+    labels:
+      com.octospork.project: octo-spork-local-ai
+  open-webui:
+    labels:
+      com.octospork.project: octo-spork-local-ai
+  n8n:
+    labels:
+      com.octospork.project: octo-spork-local-ai
+  chromadb:
+    labels:
+      com.octospork.project: octo-spork-local-ai
+  claude-agent:
+    labels:
+      com.octospork.project: octo-spork-local-ai

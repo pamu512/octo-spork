@@ -1,0 +1,13 @@
+# Merge **after** AgenticSeek ``docker-compose.yml`` + ``docker-compose.addons.yml``.
+# Uses Octo-spork multi-stage Dockerfiles (no compilers / trimmed caches in final layers).
+#
+# Requires ``OCTO_SPORK_ROOT`` in the environment (set by ``python -m local_ai_stack build-optimized``).
+
+services:
+  backend:
+    build:
+      dockerfile: ${OCTO_SPORK_ROOT}/deploy/local-ai/optimized/Dockerfile.agenticseek-backend
+
+  frontend:
+    build:
+      dockerfile: ${OCTO_SPORK_ROOT}/deploy/local-ai/optimized/Dockerfile.agenticseek-frontend

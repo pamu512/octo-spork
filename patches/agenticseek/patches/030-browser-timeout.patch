@@ -1,0 +1,27 @@
+--- a/sources/browser.py	2026-05-06 15:27:05
++++ b/sources/browser.py	2026-05-06 15:27:23
+@@ -269,6 +269,10 @@
+     
+     if stealth_mode:
+         driver = create_undetected_chromedriver(service, chrome_options)
++        try:
++            driver.command_executor.set_timeout(int(os.getenv("BROWSER_COMMAND_TIMEOUT", "300")))
++        except Exception:
++            pass
+         user_agent = get_random_user_agent()
+         stealth(driver,
+             languages=["en-US", "en"],
+@@ -280,7 +284,12 @@
+         )
+         return driver
+     else:
+-        return webdriver.Chrome(service=service, options=chrome_options)
++        driver = webdriver.Chrome(service=service, options=chrome_options)
++        try:
++            driver.command_executor.set_timeout(int(os.getenv("BROWSER_COMMAND_TIMEOUT", "300")))
++        except Exception:
++            pass
++        return driver
+ 
+ class Browser:
+     def __init__(self, driver, anticaptcha_manual_install=False):

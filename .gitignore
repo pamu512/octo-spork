@@ -1,6 +1,13 @@
+.cursor/
 .DS_Store
 .env
 deploy/local-ai/.env.local
+deploy/local-ai/docker-compose.override.yaml
+deploy/local-ai/docker-compose.port-sentinel.override.yml
 .local/
+logs/agent_security.log
+logs/audit.db
+logs/performance_vram.jsonl
+logs/context_compression_events.jsonl
 __pycache__/
 *.py[cod]

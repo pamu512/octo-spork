@@ -9,6 +9,22 @@ services:
     environment:
       - SEARXNG_SECRET_KEY=${SEARXNG_SECRET_KEY}
 
+  postgres:
+    container_name: local-ai-postgres
+    image: docker.io/postgres:16-alpine
+    restart: unless-stopped
+    profiles: ["addons", "full"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-octo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-octo}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - ../../.local/data/postgres:/var/lib/postgresql/data
+    networks:
+      - agentic-seek-net
+
   frontend:
     container_name: local-ai-agentic-ui
     # Chrome/Chromedriver stack is reliable as amd64 on Apple Silicon; keep images native.
@@ -38,7 +54,7 @@ services:
     environment:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     volumes:
-      - open-webui-data:/app/backend/data
+      - ../../.local/data/open-webui:/app/backend/data
     networks:
       - agentic-seek-net
     profiles: ["addons", "full"]
@@ -59,13 +75,23 @@ services:
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     volumes:
-      - n8n-data:/home/node/.n8n
+      - ../../.local/data/n8n:/home/node/.n8n
     networks:
       - agentic-seek-net
     profiles: ["addons", "full"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-volumes:
-  open-webui-data:
-  n8n-data:
+  chromadb:
+    container_name: local-ai-chromadb
+    image: chromadb/chroma:latest
+    restart: unless-stopped
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"
+    environment:
+      - ANONYMIZED_TELEMETRY=${CHROMA_ANONYMIZED_TELEMETRY:-FALSE}
+    volumes:
+      - ../../.local/data/chromadb:/chroma/chroma
+    networks:
+      - agentic-seek-net
+    profiles: ["addons", "full"]

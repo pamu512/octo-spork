@@ -1,0 +1,6 @@
+# Merge **after** ``docker-compose.claude-agent.yml``. Forces final ``runtime`` stage (multi-stage Claude Bun image).
+
+services:
+  claude-agent:
+    build:
+      target: runtime

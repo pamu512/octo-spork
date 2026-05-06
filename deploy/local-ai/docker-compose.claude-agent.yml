@@ -1,0 +1,26 @@
+# Claude Agent (Bun) — merged only when deploy/claude-code/Dockerfile exists.
+# ANTHROPIC_* env routes the Anthropic client to host Ollama via hostname ``ollama`` (host-gateway).
+#
+# Tool policy: default **read-only** tools (Read, Grep, Glob) via ``OCTO_CLAUDE_ALLOWED_TOOLS`` in the
+# mounted ``.local/claude_config/.env`` on the host. Do **not** set that variable here or Docker will
+# override the file on every start. Use ``python -m claude_bridge.run_agent elevate`` / ``restrict``
+# to rewrite the host env file and restart the container.
+services:
+  claude-agent:
+    container_name: local-ai-claude-agent
+    profiles: ["full", "addons"]
+    build:
+      context: ../claude-code
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ANTHROPIC_BASE_URL: http://ollama:11434
+      ANTHROPIC_AUTH_TOKEN: local-octo
+      CLAUDE_CONFIG_DIR: /app/.local/claude_config
+      NODE_ENV: production
+    volumes:
+      - ../../.local/claude_config:/app/.local/claude_config:ro
+    networks:
+      - agentic-seek-net
+    extra_hosts:
+      - "ollama:host-gateway"

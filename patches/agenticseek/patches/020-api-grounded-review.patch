@@ -1,0 +1,46 @@
+--- a/api.py	2026-05-06 15:26:48
++++ b/api.py	2026-05-06 15:27:00
+@@ -22,6 +22,8 @@
+ from sources.logger import Logger
+ from sources.schemas import QueryRequest, QueryResponse
+ 
++from sources.grounded_review import grounded_repo_review, should_use_grounded_review
++
+ from dotenv import load_dotenv
+ 
+ load_dotenv()
+@@ -232,6 +234,34 @@
+         status="Ready",
+         uid=str(uuid.uuid4())
+     )
++    if should_use_grounded_review(request.query):
++        grounded_result = grounded_repo_review(
++            request.query,
++            model=config["MAIN"]["provider_model"],
++            ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434"),
++        )
++        query_resp.done = "true"
++        query_resp.answer = grounded_result.get("answer", "")
++        query_resp.reasoning = grounded_result.get("reasoning", "")
++        query_resp.agent_name = "GroundedReview"
++        query_resp.success = "true" if grounded_result.get("success", False) else "false"
++        query_resp.blocks = {"sources": grounded_result.get("sources", [])}
++        query_resp.status = "Grounded review completed"
++
++        query_resp_history.append(
++            {
++                "done": query_resp.done,
++                "answer": query_resp.answer,
++                "agent_name": query_resp.agent_name,
++                "success": query_resp.success,
++                "blocks": query_resp.blocks,
++                "status": query_resp.status,
++                "uid": query_resp.uid,
++            }
++        )
++        logger.info("Grounded query processed successfully")
++        return JSONResponse(status_code=200, content=query_resp.jsonify())
++
+     if is_generating:
+         logger.warning("Another query is being processed, please wait.")
+         return JSONResponse(status_code=429, content=query_resp.jsonify())

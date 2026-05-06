@@ -1,0 +1,9 @@
+{
+  "name": "octo-spork-architecture-map-ts",
+  "private": true,
+  "description": "Optional ts-morph bridge for overlays/agenticseek/sources/architecture_map.py — run npm install here to enable.",
+  "dependencies": {
+    "ts-morph": "^24.0.0",
+    "typescript": "^5.7.0"
+  }
+}

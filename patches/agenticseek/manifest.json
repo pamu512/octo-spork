@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "description": "Ordered AgenticSeek customizations. Git patches are unified diffs vs upstream main (refresh when AgenticSeek changes).",
+  "steps": [
+    {
+      "type": "git_apply",
+      "patch": "patches/010-docker-compose-redis.patch",
+      "note": "Bind-mount Redis/Valkey data under octo-spork .local/data/redis"
+    },
+    {
+      "type": "git_apply",
+      "patch": "patches/020-api-grounded-review.patch",
+      "note": "Grounded GitHub/local review route in FastAPI"
+    },
+    {
+      "type": "git_apply",
+      "patch": "patches/030-browser-timeout.patch",
+      "note": "Selenium command_executor timeout from BROWSER_COMMAND_TIMEOUT"
+    },
+    {
+      "type": "overlay_copy",
+      "src": "overlays/agenticseek/sources/grounded_review.py",
+      "dst": "sources/grounded_review.py"
+    },
+    {
+      "type": "overlay_copy",
+      "src": "overlays/agenticseek/sources/tools/searx_query_policy.py",
+      "dst": "sources/tools/searx_query_policy.py"
+    },
+    {
+      "type": "overlay_copy",
+      "src": "overlays/agenticseek/sources/tools/searxSearch.py",
+      "dst": "sources/tools/searxSearch.py"
+    },
+    {
+      "type": "overlay_copy",
+      "src": "overlays/agenticseek/searxng/settings.yml",
+      "dst": "searxng/settings.yml"
+    }
+  ]
+}

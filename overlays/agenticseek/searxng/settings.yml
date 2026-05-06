@@ -1,0 +1,12 @@
+# Octo-spork: SearXNG defaults layered on upstream stock settings.
+# Mounted at ./searxng:/etc/searxng from the AgenticSeek checkout (see bootstrap overlay copy).
+
+use_default_settings: true
+
+general:
+  instance_name: "Octo-spork local"
+
+search:
+  # Strict safe-search tier for upstream meta-search engines (HTML UI + JSON API inherit).
+  safe_search: 2
+  autocomplete: ""

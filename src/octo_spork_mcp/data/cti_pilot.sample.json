@@ -1,0 +1,19 @@
+{
+  "description": "Sample CTI Pilot hash corpus for local development — replace or point OCTO_CTI_PILOT_DB at your feed.",
+  "entries": {
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855": {
+      "verdict": "benign_empty_sha256",
+      "family": "demo",
+      "confidence": 0.2,
+      "refs": ["internal:sample"],
+      "notes": "Placeholder entry for empty SHA-256 — swap for real CTI vendor payloads."
+    },
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+      "verdict": "suspicious_demo",
+      "family": "demo-malware",
+      "confidence": 0.75,
+      "refs": ["https://example.invalid/cti/demo"],
+      "notes": "Synthetic pilot row — agent should cite this when reviewing dependency artifacts matching this hash."
+    }
+  }
+}

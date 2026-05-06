@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# Convenience launcher: `scripts/octo chat` → `python -m local_ai_stack chat`
+exec python3 -m local_ai_stack "$@"

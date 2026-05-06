@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Alias launcher for the Octo-spork local AI stack CLI (`python -m local_ai_stack`).
+# Example stability repair: `./scripts/octo-spork doctor --fix --accept-prune`
+exec python3 -m local_ai_stack "$@"

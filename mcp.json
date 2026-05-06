@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "octo-tools": {
+      "command": "python3",
+      "args": ["-m", "octo_spork_mcp.octo_tools"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "OCTO_TURNTABLE_RPM": "33.33",
+        "OCTO_TURNTABLE_MODE": "album",
+        "OCTO_CTI_PILOT_DB": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -7,7 +7,7 @@
+     command: valkey-server --save 30 1 --loglevel warning
+     restart: unless-stopped
+     volumes:
+-      - redis-data:/data
++      - ../../.local/data/redis:/data
+     cap_drop:
+       - ALL
+     cap_add:
+@@ -100,7 +100,6 @@
+       - "host.docker.internal:host-gateway"
+   
+ volumes:
+-  redis-data:
+   chrome_profiles:
+ 
+ networks:

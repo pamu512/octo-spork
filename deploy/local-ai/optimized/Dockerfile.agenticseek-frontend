@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+# Octo-spork optimized AgenticSeek frontend: dependency install isolated; final image drops npm cache.
+# Context: AgenticSeek ./frontend (same as upstream Dockerfile.frontend).
+# Preserves ``npm start`` dev workflow; removes ~/.npm and redundant cache layers from the final image.
+
+FROM node:18-bookworm-slim AS deps
+WORKDIR /app
+COPY agentic-seek-front/package.json agentic-seek-front/package-lock.json ./
+RUN npm ci && npm rebuild \
+    && npm cache clean --force \
+    && rm -rf /root/.npm /tmp/*
+
+FROM node:18-bookworm-slim AS runtime
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY agentic-seek-front/ .
+RUN npm cache clean --force || true \
+    && rm -rf /root/.npm /tmp/* || true
+RUN test -f node_modules/.bin/react-scripts || npm install react-scripts --no-save
+
+ENV NODE_ENV=development
+EXPOSE 3000
+CMD ["npm", "start"]

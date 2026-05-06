@@ -307,10 +307,256 @@ class GroundedReviewTests(unittest.TestCase):
             snap = grounded_review.fetch_local_diff_snapshot(repo, "review diff", base, head)
             self.assertIsNotNone(snap)
             assert snap is not None
+            self.assertEqual(snap.get("scan_root"), str(repo.resolve()))
             self.assertEqual(snap["coverage"].get("diff_paths_count"), 1)
             md = grounded_review.format_diff_preview_markdown(snap, base, head)
             self.assertIn("b.txt", md)
             self.assertIn("no llm", md.lower())
+
+    def test_sensitive_priority_score_prefers_auth_and_docker(self):
+        self.assertGreater(
+            grounded_review.sensitive_priority_score("services/auth/login.ts"),
+            grounded_review.sensitive_priority_score("misc/foo.txt"),
+        )
+        self.assertGreaterEqual(grounded_review.sensitive_priority_score("Dockerfile"), 100)
+
+    def test_build_source_uri_markdown_github_and_local(self):
+        gh = {
+            "owner": "acme",
+            "repo": "demo",
+            "default_branch": "main",
+        }
+        line = grounded_review.build_source_uri_markdown(gh, "src/auth.ts", line_start=12)
+        self.assertIn("source://[", line)
+        self.assertIn("github.com/acme/demo/blob/main/src/auth.ts#L12", line)
+        self.assertIn("](https://github.com/acme/demo/blob/main/", line)
+        local_snap = {
+            "owner": "local",
+            "repo": "myrepo",
+            "default_branch": "local-worktree",
+            "scan_root": "/tmp/gr-repo",
+        }
+        loc = grounded_review.build_source_uri_markdown(local_snap, "app/settings.py", line_start=1)
+        self.assertTrue(loc.startswith("source://["))
+        self.assertIn("myrepo/app/settings.py#L1", loc)
+        self.assertIn("](file://", loc)
+
+    def test_summarize_sarif_evidence_receipts_orders_by_severity(self):
+        sarif = {
+            "runs": [
+                {
+                    "tool": {"driver": {"rules": [{"id": "py/warn"}]}},
+                    "results": [
+                        {
+                            "ruleId": "py/warn",
+                            "level": "warning",
+                            "message": {"text": "warn"},
+                            "locations": [
+                                {
+                                    "physicalLocation": {
+                                        "artifactLocation": {"uri": "b.py"},
+                                        "region": {"startLine": 2},
+                                    }
+                                }
+                            ],
+                        },
+                        {
+                            "ruleId": "py/err",
+                            "level": "error",
+                            "message": {"text": "bad"},
+                            "locations": [
+                                {
+                                    "physicalLocation": {
+                                        "artifactLocation": {"uri": "a.py"},
+                                        "region": {"startLine": 10},
+                                    }
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ]
+        }
+        items = grounded_review.summarize_sarif_evidence_receipts(sarif, limit=10)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0].rule_id, "py/err")
+        self.assertEqual(items[0].start_line, 10)
+        self.assertEqual(items[1].rule_id, "py/warn")
+
+    def test_extract_top_critical_findings_sorts_by_cvss(self):
+        report = {
+            "Results": [
+                {
+                    "Target": "package-lock.json",
+                    "Vulnerabilities": [
+                        {
+                            "VulnerabilityID": "CVE-LOW",
+                            "Severity": "CRITICAL",
+                            "PkgName": "a",
+                            "InstalledVersion": "1",
+                            "Title": "low first",
+                            "CVSS": {"nvd": {"V3Score": 7.0}},
+                        },
+                        {
+                            "VulnerabilityID": "CVE-HIGH",
+                            "Severity": "CRITICAL",
+                            "PkgName": "b",
+                            "InstalledVersion": "2",
+                            "Title": "high second",
+                            "CVSS": {"nvd": {"V3Score": 9.8}},
+                        },
+                    ],
+                }
+            ]
+        }
+        items = grounded_review.extract_top_critical_findings(report, limit=5)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0].raw_id, "CVE-HIGH")
+        self.assertEqual(items[1].raw_id, "CVE-LOW")
+
+    def test_collect_python_direct_dependency_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "requirements.txt").write_text(
+                "requests>=2.31\n# comment\npip_tools\n", encoding="utf-8"
+            )
+            names = grounded_review.collect_python_direct_dependency_names(root)
+            self.assertIn("requests", names)
+            self.assertIn("pip-tools", names)
+
+    def test_parse_pip_audit_json_marks_direct_cve(self):
+        payload = {
+            "dependencies": [
+                {
+                    "name": "urllib3",
+                    "version": "1.26.0",
+                    "vulns": [
+                        {
+                            "id": "GHSA-xyz",
+                            "fix_versions": ["2.0.0"],
+                            "aliases": ["CVE-2023-45803"],
+                        }
+                    ],
+                },
+                {
+                    "name": "transitive-pkg",
+                    "version": "0.1",
+                    "vulns": [{"id": "PYSEC-1", "fix_versions": [], "aliases": ["CVE-2020-9999"]}],
+                },
+            ],
+            "fixes": [],
+        }
+        direct = {"urllib3"}
+        rows = grounded_review.parse_pip_audit_json(payload, direct_names=direct)
+        by_pkg = {r.package: r for r in rows}
+        self.assertTrue(by_pkg["urllib3"].highlight_direct_cve)
+        self.assertTrue(by_pkg["urllib3"].has_cve)
+        self.assertFalse(by_pkg["transitive-pkg"].is_direct)
+
+    def test_parse_npm_audit_json_detects_cve_in_title(self):
+        payload = {
+            "vulnerabilities": {
+                "axios": {
+                    "name": "axios",
+                    "severity": "high",
+                    "isDirect": True,
+                    "range": "<= 0.21.0",
+                    "via": [
+                        {
+                            "title": "axios SSRF (CVE-2021-3749)",
+                            "url": "https://github.com/advisories/GHSA-test",
+                            "severity": "high",
+                        }
+                    ],
+                    "effects": [],
+                    "fixAvailable": {"version": "1.6.0", "isSemVerMajor": False},
+                },
+                "nested": {
+                    "name": "nested",
+                    "severity": "low",
+                    "isDirect": False,
+                    "range": "*",
+                    "via": [{"title": "Indirect advisory only GHSA-aaa", "url": "https://x"}],
+                    "effects": [],
+                    "fixAvailable": False,
+                },
+            },
+            "metadata": {},
+        }
+        rows = grounded_review.parse_npm_audit_json(payload)
+        ax = next(r for r in rows if r.package == "axios")
+        self.assertTrue(ax.highlight_direct_cve)
+        self.assertTrue(ax.has_cve)
+
+    def test_sort_dep_audit_rows_prioritizes_direct_cve(self):
+        rows = [
+            grounded_review.DepAuditRow(
+                ecosystem="npm",
+                package="z",
+                version_spec="*",
+                is_direct=False,
+                severity="critical",
+                ids="x",
+                fix_hint="—",
+                has_cve=True,
+                highlight_direct_cve=False,
+            ),
+            grounded_review.DepAuditRow(
+                ecosystem="npm",
+                package="a",
+                version_spec="*",
+                is_direct=True,
+                severity="low",
+                ids="CVE-2021-1",
+                fix_hint="—",
+                has_cve=True,
+                highlight_direct_cve=True,
+            ),
+        ]
+        ordered = grounded_review.sort_dep_audit_rows(rows)
+        self.assertEqual(ordered[0].package, "a")
+
+    def test_attach_dependency_audit_context_with_mocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "requirements.txt").write_text("requests\n", encoding="utf-8")
+            (root / "package.json").write_text('{"name":"x"}', encoding="utf-8")
+            snapshot: dict = {"scan_root": str(root)}
+            pip_payload = {"dependencies": [{"name": "requests", "version": "2.0", "vulns": []}], "fixes": []}
+            npm_payload = {"vulnerabilities": {}, "metadata": {}}
+            with (
+                patch.object(grounded_review, "run_pip_audit_json", return_value=pip_payload),
+                patch.object(grounded_review, "run_npm_audit_json", return_value=npm_payload),
+            ):
+                grounded_review.attach_dependency_audit_context(snapshot)
+            block = snapshot.get("dependency_audit_block") or ""
+            self.assertIn("pip-audit", block.lower())
+            self.assertIn("npm audit", block.lower())
+            self.assertIn(str(root.resolve()), block)
+
+
+class DiffManagerTests(unittest.TestCase):
+    def test_module_path_prefix(self) -> None:
+        self.assertEqual(grounded_review._module_path_prefix("src/a/b.py", 1), "src")
+        self.assertEqual(grounded_review._module_path_prefix("src/a/b.py", 2), "src/a")
+
+    def test_group_repo_files_by_module(self) -> None:
+        rf = grounded_review.RepoFile
+        files = [
+            rf("src/x.py", "a", 1),
+            rf("src/y.py", "b", 1),
+            rf("tests/t.py", "c", 1),
+        ]
+        groups = grounded_review._group_repo_files_by_module(files, 1)
+        keys = [g[0] for g in groups]
+        self.assertEqual(sorted(keys), ["src", "tests"])
+
+    def test_split_module_files_by_token_budget(self) -> None:
+        rf = grounded_review.RepoFile
+        body = "x" * (4000 * 4)
+        files = [rf("a.py", body, len(body)), rf("b.py", body, len(body))]
+        parts = grounded_review._split_module_files_by_token_budget("mod", files, max_evidence_tokens=4000)
+        self.assertGreaterEqual(len(parts), 2)
 
 
 if __name__ == "__main__":
