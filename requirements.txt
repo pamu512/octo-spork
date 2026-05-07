@@ -14,6 +14,12 @@ nvidia-ml-py>=12.0.0
 # MCP server for Turntable / CTI Pilot tools (`PYTHONPATH=src python -m octo_spork_mcp.octo_tools`).
 mcp>=1.2.0
 
+# LangGraph agent state typing (`src/agent/graph/state.py`: LangChain message lists).
+langchain-core>=0.3.0
+
+# Ollama chat models for `src/runner/local_ai_stack.py` remediation LLM binding.
+langchain-ollama>=0.2.0
+
 # GitHub PR comment bot (`python github_integrator.py`).
 # Optional system package: Graphviz (`dot` on PATH) for `repo_graph.dot_svg` dependency diagrams.
 PyGithub>=2.3.0
