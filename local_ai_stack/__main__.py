@@ -1578,6 +1578,7 @@ class StackOrchestrator:
                 "Claude Agent: building and starting ``claude-agent`` "
                 f"(image from {CLAUDE_CODE_DIR.relative_to(ROOT)})…"
             )
+        process_env["OCTO_SPORK_ROOT"] = str(self._root)
         try:
             self._run_compose_up(self._env_file, agenticseek_path, process_env)
         except subprocess.CalledProcessError:

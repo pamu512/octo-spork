@@ -25,23 +25,25 @@ class ResourceHardenerTests(unittest.TestCase):
         self.assertLess(lo[0].mem_limit_mib, hi[0].mem_limit_mib)
         self.assertLess(lo[1].mem_limit_mib, hi[1].mem_limit_mib)
 
-    def test_override_yaml_mem_limit_and_cpu_reservations(self) -> None:
+    def test_override_yaml_limits_memory_and_cpu_reservations(self) -> None:
         searx, n8n = compute_resources(32768, 12)
         doc = build_override_document(searx, n8n)
-        self.assertIn("mem_limit", doc["services"]["searxng"])
-        self.assertIn("mem_limit", doc["services"]["n8n"])
+        lim_s = doc["services"]["searxng"]["deploy"]["resources"]["limits"]
+        lim_n = doc["services"]["n8n"]["deploy"]["resources"]["limits"]
+        self.assertIn("memory", lim_s)
+        self.assertIn("memory", lim_n)
         res_s = doc["services"]["searxng"]["deploy"]["resources"]["reservations"]
         res_n = doc["services"]["n8n"]["deploy"]["resources"]["reservations"]
         self.assertIn("cpus", res_s)
         self.assertIn("memory", res_s)
         self.assertIn("cpus", res_n)
         self.assertIn("memory", res_n)
-        lim_s = doc["services"]["searxng"]["deploy"]["resources"]["limits"]
         self.assertIn("cpus", lim_s)
+        self.assertIn("cpus", lim_n)
         text = render_override_yaml(doc, ram_mib=32768, logical_cpus=12)
         body = text[text.find("services:") :]
         parsed = yaml.safe_load(body)
-        self.assertTrue(str(parsed["services"]["searxng"]["mem_limit"]).endswith("m"))
+        self.assertTrue(str(parsed["services"]["searxng"]["deploy"]["resources"]["limits"]["memory"]).endswith("m"))
         self.assertIn("searxng", parsed["services"])
 
     def test_ensure_respects_disable_flag(self) -> None:

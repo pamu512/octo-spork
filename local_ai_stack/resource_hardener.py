@@ -180,14 +180,19 @@ def _fmt_mem_mib(v: float) -> str:
 
 
 def build_override_document(searx: ServiceResources, n8n: ServiceResources) -> dict[str, Any]:
-    """Compose fragment merged over ``searxng`` / ``n8n`` (``mem_limit`` + CPU reservations)."""
+    """Compose fragment for ``searxng`` / ``n8n`` using ``deploy.resources`` only (no legacy ``mem_limit``).
+
+    Compose v2+ rejects ``mem_limit`` together with ``deploy.resources.limits.memory`` after file merge.
+    """
     return {
         "services": {
             "searxng": {
-                "mem_limit": _fmt_mem_mib(searx.mem_limit_mib),
                 "deploy": {
                     "resources": {
-                        "limits": {"cpus": _fmt_cpus(searx.cpus_limit)},
+                        "limits": {
+                            "cpus": _fmt_cpus(searx.cpus_limit),
+                            "memory": _fmt_mem_mib(searx.mem_limit_mib),
+                        },
                         "reservations": {
                             "cpus": _fmt_cpus(searx.cpus_reservation),
                             "memory": _fmt_mem_mib(searx.mem_reservation_mib),
@@ -196,10 +201,12 @@ def build_override_document(searx: ServiceResources, n8n: ServiceResources) -> d
                 },
             },
             "n8n": {
-                "mem_limit": _fmt_mem_mib(n8n.mem_limit_mib),
                 "deploy": {
                     "resources": {
-                        "limits": {"cpus": _fmt_cpus(n8n.cpus_limit)},
+                        "limits": {
+                            "cpus": _fmt_cpus(n8n.cpus_limit),
+                            "memory": _fmt_mem_mib(n8n.mem_limit_mib),
+                        },
                         "reservations": {
                             "cpus": _fmt_cpus(n8n.cpus_reservation),
                             "memory": _fmt_mem_mib(n8n.mem_reservation_mib),

@@ -10,7 +10,10 @@ services:
     container_name: local-ai-claude-agent
     profiles: ["full", "addons"]
     build:
-      context: ../claude-code
+      # Paths must not be relative to the primary compose file (AgenticSeek under .local/),
+      # or Docker resolves ``../claude-code`` to ``.local/claude-code``. ``local_ai_stack up`` sets
+      # ``OCTO_SPORK_ROOT``; for manual ``docker compose``, export it to the octo-spork repo root.
+      context: ${OCTO_SPORK_ROOT}/deploy/claude-code
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
