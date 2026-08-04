@@ -1,132 +1,109 @@
-\\\\# 🐙🍴 Octo-Spork
+# 🐙🍴 Octo-Spork
 
 **The Sovereign, Local-First AI Stack for Repo Hardening & Agentic Remediation.**
 
-Octo-Spork is a sophisticated "fopoon" (part-spoon, part-fork) architecture designed for solo developers and security-conscious engineers. It bridges the gap between high-latency, privacy-invasive cloud LLMs and the need for private, iterative, and deep repository reviews. 
-
-By orchestrating tools like Ollama, AgenticSeek, SearXNG, and Claude Code entirely on local hardware, Octo-Spork acts as your autonomous, privacy-first security engineer and code reviewer.
+Octo-Spork orchestrates Ollama, AgenticSeek, SearXNG, and Claude Code on local hardware for private, evidence-grounded reviews and remediation.
 
 ---
 
-## ⚡ Why Octo-Spork?
-
-When building sensitive infrastructure (like fraud detection or CTI systems), shipping your codebase to a cloud LLM provider is a security risk. Octo-Spork brings the intelligence to your code, rather than sending your code to the intelligence. 
-
-It solves the "local AI fatigue" problem through aggressive VRAM management, automated orchestrations, and long-term agentic memory, allowing you to run 30B+ parameter models on consumer hardware without system crashes.
-
----
-
-## 🏗️ Core Architecture
-
-Octo-Spork is built on an Infrastructure-as-Code philosophy, managing a multi-container stack via a Python orchestrator:
-
-*   **Brain:** Ollama (serving Llama 3.2, Qwen 3)
-*   **Orchestration & Workflow:** n8n, AgenticSeek (Langgraph-based)
-*   **Research & Grounding:** SearXNG (Strict Privacy Mode)
-*   **State & Memory:** Redis, PostgreSQL, ChromaDB
-*   **Remediation Engine:** Local containerized Claude Code
-*   **Security Integration:** Trivy, CodeQL
-
----
-
-## ✨ Key Features
-
-### 🛡️ Grounded, Evidence-First Reviews
-Octo-Spork doesn't hallucinate feedback. It integrates directly with **Trivy** and **CodeQL** to scan the filesystem. Every AI-generated PR comment includes a "Grounded Receipt" with exact file paths and line numbers.
-
-### 🤖 Local GitHub PR Bot
-A local FastAPI webhook listener interacts with your repositories via a GitHub App integration. It fetches PR diffs, chunks them for local token windows, and posts professionally formatted, emoji-coded reviews back to GitHub—all from your local machine.
-
-### 🧠 Long-Term Sovereign Memory
-Octo-Spork remembers your coding style and past mistakes:
-*   **ChromaDB Vector Store:** Indexes past vulnerabilities to catch recurring "architectural debt."
-*   **Correction Ledger:** Learns from your manual PR comment overrides to adjust its future tone and strictness.
-*   **`CLAUDE.md` Sync:** Automatically reads and updates project-specific AI instructions.
-
-### ⚖️ VRAM Governor & Stability Engine
-Running large models locally is chaotic. Octo-Spork includes a `VRAMManager` that predicts memory usage, gracefully downgrades to smaller Coder models if VRAM is pinned, and utilizes a "Circuit Breaker" to prevent infinite agentic loops from locking up your hardware.
-
-### 🛠️ Agentic Self-Healing
-More than just a reviewer, Octo-Spork can fix the bugs it finds. Triggered via a `/octo-spork fix` PR comment, the stack spins up a sandboxed Claude Code environment to implement the fix, run local tests, and push a remediation branch.
-
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
-*   Docker & Docker Compose v2
-*   Ollama installed locally (running on port 11434)
-*   Bun (for the Claude Code remediation engine)
-*   At least 16GB VRAM (24GB+ recommended for 30B+ models)
 
-### Installation
+* Docker & Docker Compose v2
+* Ollama on port **11434**
+* **pytest**, **trivy**, and **bun** on `PATH` (for scans / Claude remediation)
+* 16GB+ VRAM recommended for large models
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/octo-spork.git
-   cd octo-spork
-   
+### Install
+
+```bash
+git clone https://github.com/pamu512/octo-spork.git
+cd octo-spork
+cp deploy/local-ai/.env.example deploy/local-ai/.env.local
+pip install -r requirements.txt
 ```
 
-2. **Configure Environment:**
-   ```bash
-   cp deploy/local-ai/.env.example deploy/local-ai/.env.local
-   # Edit .env.local to add your GitHub App Tokens, preferred Ollama models, etc.
-   ```
+### Dependency check (PATH)
 
-3. **Verify System Health:**
-   ```bash
-   python src/runner/local_ai_stack.py doctor
-   ```
-   *This performs a 10-point check on CPU/GPU compatibility, Docker memory limits, and PATH configurations.*
+```bash
+python src/runner/local_ai_stack.py doctor   # pytest / trivy / bun only
+python -m local_ai_stack doctor             # full stack doctor
+```
 
-4. **Launch the Stack:**
-   ```bash
-   python src/runner/local_ai_stack.py up
-   ```
+### Launch
 
----
+```bash
+python -m local_ai_stack bootstrap   # first time
+python -m local_ai_stack up
+```
 
-## 💻 Usage Commands
-
-Octo-Spork is managed via its central Python runner.
-
-*   `python local_ai_stack.py up`: Staged rollout of the local containers (verifying VRAM and ports).
-*   `python local_ai_stack.py down --clean`: Graceful shutdown, volume pruning, and zombie-network cleanup.
-*   `python local_ai_stack.py status`: Outputs a Rich-formatted table of container health and pulled Ollama models.
-*   `python local_ai_stack.py verify`: Probes API health endpoints (Redis, Postgres, Ollama) and runs a dummy scan to ensure the grounding logic is working.
-*   `python local_ai_stack.py doctor --fix`: Auto-resolves OOM errors, resets GPU limits, and clears unused builder caches.
+Common: `status`, `verify`, `down`, `doctor --fix`.
 
 ---
 
-## 🔒 Privacy & Security
+## Remediation engines
 
-Octo-Spork is designed to be completely air-gapped from cloud AI providers:
-*   **Outbound Request Guard:** Monitors and blocks containers from reaching external IPs during Local-Only mode.
-*   **PII Filter:** Strips repo names and sensitive data before routing queries to SearXNG.
-*   **Secret Scanner:** A high-speed regex pre-check runs before the LLM sees the code, preventing secrets from even entering the local context window.
+`/octo-spork fix` clones the PR head and runs a remediation agent, then RescanLoop (Trivy) when enabled.
+
+| `OCTO_REMEDIATION_ENGINE` | Behavior |
+| ------------------------- | -------- |
+| `claude` (default) | Docker Claude Code agent (`local-ai-claude-agent`) |
+| `langgraph` | In-process LangGraph + Ollama (`src/agent/graph/graph.py`) with terminal / file_write tools, format enforcer, 5-minute / 3-failure circuit |
+
+Verified Chroma patterns are injected into `OCTO_REMEDIATION_BRIEF.md` when available (`OCTO_FIX_MEMORY_BRIEF=0` to disable).
 
 ---
 
-## 📂 Project Structure
+## Unattended audit
+
+For cron / n8n / Hermes-as-scheduler (do **not** let Hermes edit while `/octo-spork fix` runs):
+
+```bash
+python -m local_ai_stack nightly-audit --repo .
+# or: ./scripts/nightly_audit.sh
+```
+
+Runs doctor (strict), status, and pre-push-scan; logs under `logs/nightly_audit_*.log`.
+
+Verified remediations are upserted into the Chroma ledger (`upsert_verified_pattern`) when RescanLoop passes; later fixes pull them via `query_verified_patterns` (with optional fallback to review memory).
+
+### Schedulers
+
+| Tool | Asset |
+| ---- | ----- |
+| Host cron | `./scripts/nightly_audit.sh` or `python -m local_ai_stack nightly-audit` |
+| n8n | Import `deploy/n8n/octo_nightly_audit.workflow.json` — HTTP trigger/status against the webhook bot (`OCTO_AUDIT_API_KEY`, `OCTO_AUDIT_API_BASE`) |
+| Hermes | Skill at `deploy/hermes/octo-nightly-audit/SKILL.md` — **schedule only**, never edit during `/octo-spork fix` |
+
+Audit HTTP (bot must be running):
+
+- `POST /octo/audit/run` — start nightly-audit (API key required)
+- `GET /octo/audit/status` — latest log tail + `metrics.db` summary
+
+Latency rows also land in `logs/metrics.db` via `observability.latency.record_metric`. n8n mounts the repo read-only at `/opt/octo-spork`.
+
+---
+
+## Project structure
+
 ```text
 octo-spork/
-├── deploy/
-│   ├── local-ai/            # Docker Compose files & overrides
-│   └── claude-code/         # Bun-based agentic remediation container
+├── deploy/local-ai/         # Compose + env
+├── local_ai_stack/          # python -m local_ai_stack
+├── scripts/nightly_audit.sh # Scheduled audit hook
 ├── src/
-│   ├── runner/              # Core orchestrator (local_ai_stack.py)
-│   ├── github_bot/          # FastAPI webhook listener & PR formatter
-│   ├── observability/       # OpenTelemetry tracing & TUI dashboard
-│   ├── infra/               # VRAM Manager, Circuit Breakers, Port Sentinels
-│   └── memory/              # ChromaDB Vector logic & Correction Ledger
-├── grounding/
-│   └── rules/               # Domain-specific markdown rules (e.g., CTI, Fraud)
-└── logs/                    # Automated log rotation & crash reports
+│   ├── agent/               # LangGraph remediation graph + tools
+│   ├── github_bot/          # Webhooks, /octo-spork fix|analyze
+│   ├── remediation/         # RescanLoop, sandbox, verifier
+│   ├── memory/              # Verified Chroma ledger queries
+│   ├── runner/              # ChatOllama bind + thin PATH doctor
+│   └── observability/       # Tracing, vector memory, latency
+└── logs/
 ```
 
 ---
 
-## 🤝 Contributing
-As a tool built for sovereign development, forks and local modifications are highly encouraged. If you build a new MCP server integration or a better VRAM scheduling algorithm, please open a PR!
-```
+## Contributing
+
+Forks and local modifications are encouraged. Open a PR for MCP integrations or VRAM scheduling improvements.

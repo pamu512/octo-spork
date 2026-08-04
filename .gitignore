@@ -5,8 +5,13 @@ deploy/local-ai/.env.local
 deploy/local-ai/docker-compose.override.yaml
 deploy/local-ai/docker-compose.port-sentinel.override.yml
 .local/
+.venv/
+.venv-dev/
+*.egg-info/
 logs/agent_security.log
 logs/audit.db
+logs/metrics.db
+logs/nightly_audit_*.log
 logs/performance_vram.jsonl
 logs/context_compression_events.jsonl
 __pycache__/

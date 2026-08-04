@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from github_bot.audit_routes import router as audit_router
 from github_bot.auth import GitHubAuth
 from github_bot.context_docs import router as context_docs_router
 from github_bot.delivery_cache import is_valid_delivery_id, try_claim_delivery
@@ -107,6 +108,7 @@ app = FastAPI(
 )
 
 app.include_router(context_docs_router)
+app.include_router(audit_router)
 
 
 async def _pr_review_worker(envelope: dict[str, Any]) -> None:

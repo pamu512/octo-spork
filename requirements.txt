@@ -17,6 +17,9 @@ mcp>=1.2.0
 # LangGraph agent state typing (`src/agent/graph/state.py`: LangChain message lists).
 langchain-core>=0.3.0
 
+# Compiled remediation graph (`src/agent/graph/graph.py`).
+langgraph>=0.2.0
+
 # Ollama chat models for `src/runner/local_ai_stack.py` remediation LLM binding.
 langchain-ollama>=0.2.0
 

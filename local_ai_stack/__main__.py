@@ -2402,6 +2402,39 @@ def command_doctor(
     return 0
 
 
+def command_nightly_audit(env_file: Path, repo: str) -> int:
+    """Run the unattended audit script (doctor/status/pre-push-scan) for cron or Hermes."""
+
+    script = ROOT / "scripts" / "nightly_audit.sh"
+    if not script.is_file():
+        print(f"Error: missing {script}", file=sys.stderr, flush=True)
+        return 2
+    env = os.environ.copy()
+    env["OCTO_SPORK_REPO_ROOT"] = str(ROOT)
+    env["OCTO_ENV_FILE"] = str(Path(env_file).expanduser().resolve())
+    env["OCTO_AUDIT_REPO"] = str(repo)
+    _print(f"+ {script} (OCTO_AUDIT_REPO={repo})")
+    completed = subprocess.run(
+        ["bash", str(script)],
+        cwd=str(ROOT),
+        env=env,
+        check=False,
+    )
+    return int(completed.returncode)
+
+
+def command_audit_status() -> int:
+    """Print :func:`observability.audit_status.audit_status_payload` as JSON."""
+
+    src = ROOT / "src"
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
+    from observability.audit_status import audit_status_payload
+
+    _print(json.dumps(audit_status_payload(), indent=2, default=str))
+    return 0
+
+
 def command_benchmark(
     env_file: Path,
     *,
@@ -3254,6 +3287,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="With --fix: run `docker builder prune -af` (destructive to unused build cache)",
     )
 
+    nightly_audit = subparsers.add_parser(
+        "nightly-audit",
+        help=(
+            "Unattended audit for cron/n8n/Hermes: doctor --strict, status, pre-push-scan "
+            "(wraps scripts/nightly_audit.sh)"
+        ),
+    )
+    nightly_audit.add_argument(
+        "--env-file",
+        dest="env_file",
+        default=None,
+        help="Path to .env.local (default: deploy/local-ai/.env.local)",
+    )
+    nightly_audit.add_argument(
+        "--repo",
+        default=".",
+        help="Git repository root for scans (default: current directory)",
+    )
+
+    audit_status_cmd = subparsers.add_parser(
+        "audit-status",
+        help="Print JSON summary of latest nightly_audit_*.log + logs/metrics.db (no Docker)",
+    )
+    audit_status_cmd.add_argument(
+        "--env-file",
+        dest="env_file",
+        default=None,
+        help="Accepted for CLI consistency; unused",
+    )
+
     remediation_ui = subparsers.add_parser(
         "remediation-ui",
         help=(
@@ -3508,6 +3571,13 @@ def main() -> int:
                 fix=bool(getattr(args, "fix", False)),
                 accept_prune=bool(getattr(args, "accept_prune", False)),
             )
+        elif args.command == "nightly-audit":
+            return command_nightly_audit(
+                env_file,
+                str(getattr(args, "repo", ".") or "."),
+            )
+        elif args.command == "audit-status":
+            return command_audit_status()
         elif args.command == "remediation-ui":
             src = ROOT / "src"
             if str(src) not in sys.path:

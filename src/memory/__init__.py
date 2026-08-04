@@ -6,6 +6,7 @@ from .vector_store import (
     init_collection,
     migrate_reset_ledger_collection,
     query_verified_patterns,
+    upsert_verified_pattern,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "init_collection",
     "migrate_reset_ledger_collection",
     "query_verified_patterns",
+    "upsert_verified_pattern",
 ]

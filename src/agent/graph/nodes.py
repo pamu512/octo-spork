@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Dict, Mapping
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
@@ -19,6 +19,32 @@ _ERR_NOT_FOUND = "ERROR: Tool not found."
 
 _terminal_tool = TerminalTool()
 _file_write_tool = FileWriteTool()
+
+_PATH_HINT = (
+    "PATH HINT: Host paths may not exist in this environment. Prefer the workspace root "
+    "(often `/opt/workspace` in the Claude container, or the clone directory for LangGraph). "
+    "Use `ls` / `pwd` via the terminal tool before `cd`. Do not spin on missing directories."
+)
+
+
+def _message_text(message: BaseMessage) -> str:
+    """Flatten LangChain message ``content`` to plain text for inspection."""
+
+    raw = getattr(message, "content", None)
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        parts: list[str] = []
+        for block in raw:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    parts.append(str(block.get("text", "")))
+                elif isinstance(block.get("text"), str):
+                    parts.append(block["text"])
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return str(raw or "")
 
 
 def _extract_tool_calls(message: BaseMessage) -> list[Any]:
@@ -85,10 +111,89 @@ def generate_system_prompt(state: AgentState) -> str:
         without altering the static prompt text.
     """
     return (
+        'CRITICAL INSTRUCTION: YOU ARE AN EXECUTION ENGINE, NOT A CHATBOT. YOU ARE STRICTLY FORBIDDEN FROM OUTPUTTING MARKDOWN CODE BLOCKS CONTAINING BASH COMMANDS. IF YOU NEED TO RUN A COMMAND, YOU MUST EMIT A VALID JSON TOOL CALL. EXPLAINING STEPS IS A FAILURE. IF A DIRECTORY DOES NOT EXIST, USE "ls" TO FIND THE CORRECT PATH INSTEAD OF COMPLAINING. '
         "You are an autonomous remediation compiler. Do not explain your steps. "
         "If you need to verify code, output a tool call for pytest immediately. "
         "You are forbidden from outputting markdown code blocks containing fixes without using the FileWrite tool."
     )
+
+
+def enforce_tool_format(state: AgentState) -> Dict[str, Any]:
+    """Intercept LLM output to prevent 'consultant mode'.
+
+    If the model sends markdown bash blocks instead of tool calls, append a
+    :class:`~langchain_core.messages.SystemMessage` so the run retries with tool calls.
+    Also nudges when the last AI turn has neither tool calls nor a format slap already applied.
+    """
+    messages = list(state["messages"])
+    if not messages:
+        return {}
+    last_message = messages[-1]
+    if not isinstance(last_message, AIMessage):
+        return {}
+    content = _message_text(last_message)
+    if re.search(r"```(?:bash|sh|zsh)", content, re.IGNORECASE):
+        return {
+            **state,
+            "messages": messages
+            + [
+                SystemMessage(
+                    content=(
+                        "FORMAT ERROR: You attempted to print a bash command to the user "
+                        "as text. Do not explain what to do. Use the TerminalTool to "
+                        "execute the command directly. Your response must be a tool call."
+                    )
+                )
+            ],
+        }
+    calls = getattr(last_message, "tool_calls", None) or []
+    if not calls:
+        return {
+            **state,
+            "messages": messages
+            + [
+                SystemMessage(
+                    content=(
+                        "FORMAT ERROR: Your last turn had no tool calls. Do not explain steps. "
+                        "Emit a valid JSON tool call to terminal or file_write."
+                    )
+                )
+            ],
+        }
+    return {}
+
+
+def path_sentinel(state: AgentState) -> AgentState:
+    """Correct common hallucinations regarding local vs container paths.
+
+    When recent tool stderr shows missing paths / failed ``cd``, inject a workspace hint.
+    """
+    messages = list(state["messages"])
+    if not messages:
+        return state
+    # Look at the last few tool responses for ENOENT / cd failures.
+    window = messages[-6:]
+    stuck = False
+    for msg in window:
+        if not isinstance(msg, ToolMessage):
+            continue
+        text = _message_text(msg).lower()
+        if any(
+            needle in text
+            for needle in (
+                "no such file or directory",
+                "not a directory",
+                "cannot find path",
+                "enoent",
+            )
+        ):
+            stuck = True
+            break
+    if not stuck:
+        return state
+    if messages and isinstance(messages[-1], SystemMessage) and _PATH_HINT in _message_text(messages[-1]):
+        return state
+    return {**state, "messages": messages + [SystemMessage(content=_PATH_HINT)]}
 
 
 def execute_tools(state: AgentState) -> AgentState:

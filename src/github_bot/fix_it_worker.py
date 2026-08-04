@@ -7,6 +7,7 @@ failed attempts, posts a **System Warning** comment instead of opening a remedia
 
 Environment:
 
+- ``OCTO_REMEDIATION_ENGINE`` — ``claude`` (default) or ``langgraph`` for the in-process Ollama graph.
 - ``OCTO_FIX_VERIFY_ENABLED`` — ``0`` / ``false`` to skip RescanLoop (default: on).
 - ``OCTO_FIX_VERIFY_CVE`` — CVE id to clear (e.g. ``CVE-2024-12345``); otherwise first CVE in the brief.
 - ``OCTO_FIX_VERIFY_MAX_ATTEMPTS`` — default ``3``.
@@ -40,6 +41,78 @@ from github_bot.git_manager import build_grounded_pull_request
 _LOG = logging.getLogger(__name__)
 
 CVE_INLINE_RE = re.compile(r"\b(CVE-\d{4}-\d+)\b", re.IGNORECASE)
+
+
+def _record_verified_ledger_patterns(
+    *,
+    clone_dir: Path,
+    pr_head_sha: str,
+    cve_id: str,
+    agent_diff: str,
+    owner: str,
+    repo_name: str,
+) -> None:
+    """Best-effort upsert of verified remediation patterns into the Chroma ledger."""
+
+    if os.environ.get("OCTO_FIX_LEDGER_UPSERT", "1").strip().lower() in {"0", "false", "no", "off"}:
+        return
+    if not (cve_id or "").strip():
+        return
+    try:
+        from memory.vector_store import upsert_verified_pattern
+    except Exception as exc:
+        _LOG.debug("ledger upsert skipped (import): %s", exc)
+        return
+
+    names_proc = _git(["diff", "--name-only", pr_head_sha], cwd=clone_dir, timeout=60)
+    paths = [
+        ln.strip()
+        for ln in (names_proc.stdout or "").splitlines()
+        if ln.strip() and not ln.strip().startswith("OCTO_")
+    ]
+    if not paths:
+        paths = ["."]
+    summary = (
+        f"Verified remediation for {cve_id} in {owner}/{repo_name}.\n"
+        f"Files: {', '.join(paths[:20])}\n\n"
+        f"{(agent_diff or '')[:6000]}"
+    )
+    for path in paths[:8]:
+        try:
+            upsert_verified_pattern(cve_id=cve_id, file_path=path, document=summary)
+        except Exception as exc:
+            _LOG.warning("ledger upsert failed for %s: %s", path, exc)
+
+
+def _verified_memory_brief_section(brief_doc: str, *, cve_id: str) -> str:
+    """Pull verified ledger patterns into the remediation brief (best-effort; never raises)."""
+
+    if os.environ.get("OCTO_FIX_MEMORY_BRIEF", "1").strip().lower() in {"0", "false", "no", "off"}:
+        return ""
+    query = (cve_id or "").strip() or brief_doc[:2000]
+    try:
+        from memory.vector_store import query_verified_patterns
+
+        rows = query_verified_patterns(query)
+    except Exception as exc:
+        _LOG.debug("verified memory brief skipped: %s", exc)
+        return ""
+    if not rows:
+        return ""
+    lines = [
+        "## Verified historical patterns (is_verified=True only)",
+        "",
+        "Reuse approaches that previously cleared verification. Do not invent unverified steps.",
+        "",
+    ]
+    for i, row in enumerate(rows[:5], start=1):
+        cve = str(row.get("cve_id") or "")
+        path = str(row.get("file_path") or "")
+        doc = str(row.get("document") or "").strip().replace("\n", " ")
+        if len(doc) > 400:
+            doc = doc[:400] + "…"
+        lines.append(f"{i}. CVE `{cve}` path `{path}` — {doc}")
+    return "\n".join(lines)
 
 
 def _record_remediation_latency(
@@ -80,6 +153,17 @@ def _record_remediation_latency(
         log_remediation_latency(row)
     except OSError as exc:
         _LOG.debug("remediation latency log skipped: %s", exc)
+    try:
+        from observability.latency import record_metric
+
+        record_metric(
+            pr_name=pr_html_url or cve_id or outcome,
+            start_time=scan_start,
+            end_time=end,
+            success=success_verified_patch,
+        )
+    except Exception as exc:
+        _LOG.debug("logs/metrics.db write skipped: %s", exc)
     maybe_trigger_context_reset_for_ttr(
         ttr_seconds=ttr,
         success_verified_patch=success_verified_patch,
@@ -520,8 +604,16 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
         brief_doc,
     )
 
+    memory_block = _verified_memory_brief_section(brief_doc, cve_id=cve_id_for_log)
+    if memory_block:
+        brief_doc = brief_doc + "\n\n" + memory_block
+
+    from agent.remediation_runner import remediation_engine
+
+    engine = remediation_engine()
     env_file, agenticseek_path = resolve_compose_paths(repo_root)
-    ensure_claude_agent_container(repo_root, env_file, agenticseek_path)
+    if engine == "claude":
+        ensure_claude_agent_container(repo_root, env_file, agenticseek_path)
 
     clones_root = Path(
         os.environ.get("OCTO_SPORK_TEMP_CLONES_DIR") or (repo_root / ".temp_clones")
@@ -569,14 +661,25 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
 
         (clone_dir / "OCTO_REMEDIATION_BRIEF.md").write_text(brief_doc, encoding="utf-8")
 
-        timeout_sec = int(os.environ.get("OCTO_FIX_CLAUDE_TIMEOUT_SEC", "3600"))
-        code, transcript = run_claude_remediation_agent(
-            repo_root,
-            env_file,
-            agenticseek_path,
-            clone_dir,
-            timeout_sec=timeout_sec,
-        )
+        if engine == "langgraph":
+            from agent.remediation_runner import run_langgraph_remediation_agent
+
+            _LOG.info("Remediation engine=langgraph (OCTO_REMEDIATION_ENGINE)")
+            code, transcript = run_langgraph_remediation_agent(
+                clone_dir,
+                brief=brief_doc,
+                target_cve=cve_id_for_log,
+            )
+        else:
+            timeout_sec = int(os.environ.get("OCTO_FIX_CLAUDE_TIMEOUT_SEC", "3600"))
+            _LOG.info("Remediation engine=claude (default)")
+            code, transcript = run_claude_remediation_agent(
+                repo_root,
+                env_file,
+                agenticseek_path,
+                clone_dir,
+                timeout_sec=timeout_sec,
+            )
 
         trace_path = clone_dir / "OCTO_AGENT_TRACE.md"
         trace_body = ""
@@ -655,6 +758,14 @@ def run_fix_remediation_pr_sync(envelope: dict[str, Any]) -> None:
                 )
                 return
             verified_patch_reached = True
+            _record_verified_ledger_patterns(
+                clone_dir=clone_dir,
+                pr_head_sha=pr_head_sha,
+                cve_id=cve_for_verify,
+                agent_diff=agent_diff,
+                owner=owner,
+                repo_name=repo_name,
+            )
         elif verify_on and not cve_for_verify:
             _LOG.warning(
                 "OCTO_FIX_VERIFY_ENABLED but no CVE id (set OCTO_FIX_VERIFY_CVE or mention CVE in brief); "

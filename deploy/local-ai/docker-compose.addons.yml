@@ -74,8 +74,14 @@ services:
       - WEBHOOK_URL=http://localhost:${N8N_PORT:-5678}/
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # Host webhook bot for audit trigger/status (see deploy/n8n/octo_nightly_audit.workflow.json).
+      - OCTO_AUDIT_API_BASE=${OCTO_AUDIT_API_BASE:-http://host.docker.internal:8008}
+      - OCTO_AUDIT_API_KEY=${OCTO_AUDIT_API_KEY:-}
+      - OCTO_SPORK_HOST_PATH=/opt/octo-spork
     volumes:
       - ../../.local/data/n8n:/home/node/.n8n
+      # Read-only mount of this checkout for log browsing / path hints (audits run on the host via API).
+      - ../..:/opt/octo-spork:ro
     networks:
       - agentic-seek-net
     profiles: ["addons", "full"]

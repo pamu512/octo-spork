@@ -1,0 +1,100 @@
+{
+  "name": "Octo-Spork Nightly Audit",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  },
+  "meta": {
+    "description": "Triggers host nightly-audit via webhook bot POST /octo/audit/run, then fetches GET /octo/audit/status. Set OCTO_AUDIT_API_KEY on the bot and in n8n credentials/headers. Default base: http://host.docker.internal:8008 (uvicorn github_bot)."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "15 3 * * *"
+            }
+          ]
+        }
+      },
+      "id": "octo-nightly-schedule",
+      "name": "Daily 03:15 UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.OCTO_AUDIT_API_BASE || 'http://host.docker.internal:8008'}}/octo/audit/run?repo=.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.OCTO_AUDIT_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "octo-nightly-trigger",
+      "name": "Trigger nightly-audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "amount": 120,
+        "unit": "seconds"
+      },
+      "id": "octo-nightly-wait",
+      "name": "Wait 2m",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.OCTO_AUDIT_API_BASE || 'http://host.docker.internal:8008'}}/octo/audit/status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{$env.OCTO_AUDIT_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "octo-nightly-status",
+      "name": "Fetch audit status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 300]
+    }
+  ],
+  "connections": {
+    "Daily 03:15 UTC": {
+      "main": [[{ "node": "Trigger nightly-audit", "type": "main", "index": 0 }]]
+    },
+    "Trigger nightly-audit": {
+      "main": [[{ "node": "Wait 2m", "type": "main", "index": 0 }]]
+    },
+    "Wait 2m": {
+      "main": [[{ "node": "Fetch audit status", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "versionId": "2"
+}
