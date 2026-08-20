@@ -1788,90 +1788,10 @@ def _ollama_host_log_snippet(*, tail_lines: int = 80, max_chars: int = 12000) ->
     return text
 
 
-def _lines_from_trivy_critical_report(report: dict[str, Any]) -> list[str]:
-    lines: list[str] = []
-    for result in report.get("Results") or []:
-        if not isinstance(result, dict):
-            continue
-        target = str(result.get("Target") or "")
-        for vuln in result.get("Vulnerabilities") or []:
-            if not isinstance(vuln, dict):
-                continue
-            if str(vuln.get("Severity") or "").upper() != "CRITICAL":
-                continue
-            vid = str(vuln.get("VulnerabilityID") or vuln.get("ID") or "?")
-            pkg = str(vuln.get("PkgName") or vuln.get("PkgID") or "?")
-            title = str(vuln.get("Title") or "").strip()
-            tail = f": {title}" if title else ""
-            lines.append(f"[security] CRITICAL vuln {vid} in `{pkg}` ({target}){tail}")
-        for mc in result.get("Misconfigurations") or []:
-            if not isinstance(mc, dict):
-                continue
-            if str(mc.get("Severity") or "").upper() != "CRITICAL":
-                continue
-            mid = str(mc.get("ID") or "?")
-            title = str(mc.get("Title") or "").strip()
-            tail = f": {title}" if title else ""
-            lines.append(f"[security] CRITICAL misconfiguration {mid} ({target}){tail}")
-    return lines[:40]
-
-
-def collect_trivy_critical_evidence(
-    scan_root: Path, *, timeout: int = 180
-) -> tuple[bool, list[str], bool]:
-    """Return (critical_found, messages, skipped_no_binary).
-
-    Mirrors grounded-review scope: CRITICAL filesystem vulns/misconfigs only.
-    """
-    exe = shutil.which("trivy")
-    if not exe:
-        return False, ["[octo-spork] Trivy not on PATH; Critical filesystem scan skipped."], True
-    scan_root = scan_root.expanduser().resolve()
-    if not scan_root.is_dir():
-        return False, [f"[octo-spork] Scan root is not a directory: {scan_root}"], False
-    cmd = [
-        exe,
-        "fs",
-        "--severity",
-        "CRITICAL",
-        "--format",
-        "json",
-        "--quiet",
-        str(scan_root),
-    ]
-    try:
-        completed = subprocess.run(
-            cmd,
-            cwd=str(scan_root),
-            capture_output=True,
-            text=True,
-            timeout=max(30, int(timeout)),
-            check=False,
-        )
-    except FileNotFoundError:
-        return False, ["[octo-spork] Trivy executable vanished mid-invocation."], True
-    except subprocess.TimeoutExpired:
-        return True, [f"[octo-spork] Trivy timed out after {timeout}s"], False
-    except OSError as exc:
-        return True, [f"[octo-spork] Trivy OS error: {exc}"], False
-
-    raw = (completed.stdout or "").strip()
-    if not raw:
-        err = (completed.stderr or "").strip()
-        return True, [f"[octo-spork] Trivy produced empty stdout (exit {completed.returncode}): {err[:1500]}"], False
-
-    try:
-        report = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        return True, [f"[octo-spork] Could not parse Trivy JSON: {exc}; stderr={(completed.stderr or '')[:800]}"], False
-
-    if not isinstance(report, dict):
-        return True, ["[octo-spork] Trivy JSON root was not an object."], False
-
-    critical_lines = _lines_from_trivy_critical_report(report)
-    if critical_lines:
-        return True, critical_lines, False
-    return False, [], False
+from local_ai_stack.pre_push_scan import (  # noqa: E402
+    _lines_from_trivy_critical_report,
+    collect_trivy_critical_evidence,
+)
 
 
 def _hook_probe_n8n_ollama_reachability(
@@ -1958,100 +1878,11 @@ def run_hook_infra_health_probe(env_file: Path) -> tuple[bool, list[str]]:
     return blocked, logs
 
 
-def run_pre_push_scan(
-    env_file: Path,
-    repo_root: Path,
-    *,
-    skip_health: bool,
-    skip_trivy: bool,
-    require_trivy: bool,
-) -> int:
-    """Return 0 when push should proceed, 1 when blocked."""
-    failures: list[str] = []
-    repo_root = repo_root.expanduser().resolve()
-
-    if not skip_health:
-        bad_health, health_logs = run_hook_infra_health_probe(env_file)
-        if bad_health:
-            failures.extend(health_logs)
-
-    if not skip_trivy:
-        critical, tri_logs, skipped = collect_trivy_critical_evidence(repo_root)
-        if skipped and require_trivy:
-            failures.append("[security] --require-trivy set but `trivy` was not found on PATH.")
-        elif critical:
-            failures.extend(tri_logs)
-        elif skipped and tri_logs:
-            for msg in tri_logs:
-                print(msg, file=sys.stderr)
-
-    for msg in failures:
-        print(msg, file=sys.stderr)
-    if failures:
-        print(
-            "\n[octo-spork] pre-push scan failed: resolve infra health issues and/or CRITICAL Trivy findings.\n",
-            file=sys.stderr,
-        )
-        return 1
-    return 0
-
-
-def command_pre_push_scan(
-    env_file: Path,
-    repo: str,
-    skip_health: bool,
-    skip_trivy: bool,
-    require_trivy: bool,
-) -> None:
-    code = run_pre_push_scan(
-        env_file,
-        _repo_path_from_arg(repo),
-        skip_health=skip_health,
-        skip_trivy=skip_trivy,
-        require_trivy=require_trivy,
-    )
-    if code != 0:
-        raise RuntimeError("Octo-spork pre-push scan did not pass.")
-
-
-def command_install_hook(repo: str, env_file: Path, *, force: bool) -> None:
-    """Write a pre-push hook that runs ``pre-push-scan`` for this worktree."""
-    repo_path = _repo_path_from_arg(repo)
-    git_dir = repo_path / ".git"
-    if not git_dir.is_dir():
-        raise RuntimeError(f"Not a git repository: {repo_path}")
-    hook_path = git_dir / "hooks" / "pre-push"
-    hook_path.parent.mkdir(parents=True, exist_ok=True)
-    if hook_path.exists() and not force:
-        raise RuntimeError(
-            f"{hook_path} already exists. Re-run with --force to overwrite, or remove the file first."
-        )
-
-    env_resolved = env_file.resolve()
-    py = sys.executable
-    octo = str(ROOT)
-    # Hook runs with cwd = git toplevel; keep absolute paths.
-    q_octo = shlex.quote(octo)
-    q_py = shlex.quote(py)
-    q_env = shlex.quote(str(env_resolved))
-    body = f"""#!/usr/bin/env bash
-# Generated by: python -m local_ai_stack install-hook
-# Octo-spork pre-push: lightweight stack health (verify-style) + Trivy CRITICAL on the repo root.
-set -euo pipefail
-OCTO_ROOT={q_octo}
-PYTHON={q_py}
-ENV_FILE={q_env}
-export PYTHONPATH="${{OCTO_ROOT}}${{PYTHONPATH:+:$PYTHONPATH}}"
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-echo "[octo-spork] pre-push scan (repo: $REPO_ROOT)…" >&2
-exec "$PYTHON" -m local_ai_stack pre-push-scan --env-file "$ENV_FILE" --repo "$REPO_ROOT"
-"""
-    hook_path.write_text(body, encoding="utf-8")
-    try:
-        hook_path.chmod(0o755)
-    except OSError:
-        pass
-    _print(f"Wrote {hook_path}")
+from local_ai_stack.pre_push_scan import (  # noqa: E811
+    command_install_hook,
+    command_pre_push_scan,
+    run_pre_push_scan,
+)
 
 
 def command_install_verify_logic_hook(repo: str, env_file: Path, *, force: bool) -> None:
@@ -3138,7 +2969,7 @@ def build_parser() -> argparse.ArgumentParser:
     pre_push.add_argument(
         "--require-trivy",
         action="store_true",
-        help="Fail if the `trivy` CLI is missing (default: warn-only when Trivy is absent)",
+        help="Deprecated no-op (fail-closed is now the default; use --skip-trivy to opt out)",
     )
 
     privacy_mon = subparsers.add_parser(
@@ -3532,7 +3363,6 @@ def main() -> int:
                 getattr(args, "repo", "."),
                 skip_health=bool(getattr(args, "skip_health", False)),
                 skip_trivy=bool(getattr(args, "skip_trivy", False)),
-                require_trivy=bool(getattr(args, "require_trivy", False)),
             )
         elif args.command == "privacy-monitor":
             from local_ai_stack.privacy_monitor import run_monitor_loop
