@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WA = ROOT / "deploy" / "n8n" / "scripts" / "wa_send.sh"
+HERMES_BRIEF = ROOT / "deploy" / "n8n" / "scripts" / "run_hermes_brief.sh"
 
 
 def _wa_env() -> dict[str, str]:
@@ -33,6 +34,21 @@ def test_wa_send_unknown_channel_fails() -> None:
         ["bash", str(WA), "--channel", "other", "--text", "hi"],
         cwd=ROOT,
         env=_wa_env(),
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0
+
+
+def test_run_hermes_brief_fails_without_root() -> None:
+    assert HERMES_BRIEF.is_file()
+    env = os.environ.copy()
+    env.pop("HERMES_FRAUD_ROOT", None)
+    env.pop("HERMES_FINANCE_ROOT", None)
+    proc = subprocess.run(
+        ["bash", str(HERMES_BRIEF), "fraud"],
+        cwd=ROOT,
+        env=env,
         capture_output=True,
         text=True,
     )
