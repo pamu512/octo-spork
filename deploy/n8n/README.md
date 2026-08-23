@@ -81,7 +81,7 @@ hermes --help
 ./deploy/n8n/scripts/wa_send.sh --channel alerts --text "n8n bus probe $(date -Iseconds)"
 ```
 
-`wa_send.sh` calls `hermes send --to "$TO" --stdin`. If this Mac's Hermes uses a different subcommand (`hermes message`, different flags), change **that one line only** in `deploy/n8n/scripts/wa_send.sh`.
+Confirmed Mac CLI: `hermes send --to …` with a stdin pipe (no `--stdin` flag). `--file PATH` is used when `wa_send.sh --file` is set. `--stdin` is unrecognized on this Hermes.
 
 ### 6. Activate and retire the duplicate Hermes cron
 

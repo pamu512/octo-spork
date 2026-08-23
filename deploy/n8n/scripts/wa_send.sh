@@ -38,9 +38,12 @@ fi
 
 # Prefer Hermes CLI send if present; fail closed otherwise.
 if command -v hermes >/dev/null 2>&1; then
-  # Exact subcommand may be `hermes send` / `hermes message` depending on Hermes version —
-  # probe with `hermes --help` on the Mac and adjust one line here only.
-  printf '%s\n' "$BODY" | hermes send --to "$TO" --stdin
+  # Mac Hermes: positional message, --file PATH, or stdin pipe (no --stdin flag).
+  if [[ -n "$FILE" ]]; then
+    hermes send --to "$TO" --file "$FILE"
+  else
+    printf '%s\n' "$BODY" | hermes send --to "$TO"
+  fi
   exit $?
 fi
 
