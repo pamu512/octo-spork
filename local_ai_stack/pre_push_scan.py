@@ -6,6 +6,7 @@ unless the caller explicitly passes ``--skip-trivy``.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -95,6 +96,11 @@ def collect_trivy_critical_evidence(
         return True, ["[octo-spork] Trivy JSON root was not an object."], False
 
     critical_lines = _lines_from_trivy_critical_report(report)
+    if completed.returncode != 0:
+        # ponytail: broken scan ≠ clean — empty/missing Results must not mask a nonzero exit.
+        return True, critical_lines + [
+            f"[octo-spork] Trivy exited {completed.returncode} (broken scan ≠ clean)."
+        ], False
     if critical_lines:
         return True, critical_lines, False
     return False, [], False
@@ -199,6 +205,8 @@ exec "$PYTHON" -m local_ai_stack pre-push-scan --env-file "$ENV_FILE" --repo "$R
     hook_path.write_text(body, encoding="utf-8")
     try:
         hook_path.chmod(0o755)
-    except OSError:
-        pass
+    except OSError as exc:
+        raise RuntimeError(f"Failed to make pre-push hook executable: {hook_path}: {exc}") from exc
+    if not os.access(hook_path, os.X_OK):
+        raise RuntimeError(f"Pre-push hook is not executable: {hook_path}")
     _print(f"Wrote {hook_path}")
