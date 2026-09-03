@@ -2233,27 +2233,6 @@ def command_doctor(
     return 0
 
 
-def command_nightly_audit(env_file: Path, repo: str) -> int:
-    """Run the unattended audit script (doctor/status/pre-push-scan) for cron or Hermes."""
-
-    script = ROOT / "scripts" / "nightly_audit.sh"
-    if not script.is_file():
-        print(f"Error: missing {script}", file=sys.stderr, flush=True)
-        return 2
-    env = os.environ.copy()
-    env["OCTO_SPORK_REPO_ROOT"] = str(ROOT)
-    env["OCTO_ENV_FILE"] = str(Path(env_file).expanduser().resolve())
-    env["OCTO_AUDIT_REPO"] = str(repo)
-    _print(f"+ {script} (OCTO_AUDIT_REPO={repo})")
-    completed = subprocess.run(
-        ["bash", str(script)],
-        cwd=str(ROOT),
-        env=env,
-        check=False,
-    )
-    return int(completed.returncode)
-
-
 def command_audit_status() -> int:
     """Print :func:`observability.audit_status.audit_status_payload` as JSON."""
 
@@ -3402,6 +3381,8 @@ def main() -> int:
                 accept_prune=bool(getattr(args, "accept_prune", False)),
             )
         elif args.command == "nightly-audit":
+            from local_ai_stack.nightly_audit import command_nightly_audit
+
             return command_nightly_audit(
                 env_file,
                 str(getattr(args, "repo", ".") or "."),
