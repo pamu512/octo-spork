@@ -1,0 +1,23 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      - TZ=Asia/Hong_Kong
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:${N8N_PORT:-5678}/
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=Asia/Hong_Kong
+    volumes:
+      - n8n-data:/home/node/.n8n
+      # Host scripts + repos visible to Execute Command nodes:
+      - ${N8N_HOST_REPOS_ROOT}:/host/repos:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  n8n-data:

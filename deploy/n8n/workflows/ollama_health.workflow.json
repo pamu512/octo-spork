@@ -1,0 +1,97 @@
+{
+  "name": "Ollama Health",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Hong_Kong"
+  },
+  "meta": {
+    "description": "Weekdays 06:50 HKT: check_ollama.sh. Alerts only on failure; success is silent."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "50 6 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "ollama-sched",
+      "name": "Weekdays 06:50 HKT",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "command": "bash \"$OCTO_SPORK_ROOT/deploy/n8n/scripts/check_ollama.sh\""
+      },
+      "id": "ollama-run",
+      "name": "Check Ollama",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ollama-exit-eq-0",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ollama-if",
+      "name": "IF exit 0",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "command": "bash \"$OCTO_SPORK_ROOT/deploy/n8n/scripts/wa_send.sh\" --channel alerts --text \"Ollama down on Mac\""
+      },
+      "id": "ollama-alerts",
+      "name": "Send Alerts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [940, 420]
+    }
+  ],
+  "connections": {
+    "Weekdays 06:50 HKT": {
+      "main": [[{ "node": "Check Ollama", "type": "main", "index": 0 }]]
+    },
+    "Check Ollama": {
+      "main": [[{ "node": "IF exit 0", "type": "main", "index": 0 }]]
+    },
+    "IF exit 0": {
+      "main": [
+        [],
+        [{ "node": "Send Alerts", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "versionId": "1"
+}
