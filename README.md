@@ -73,7 +73,7 @@ Verified remediations are upserted into the Chroma ledger (`upsert_verified_patt
 | Tool | Asset |
 | ---- | ----- |
 | Host cron | `./scripts/nightly_audit.sh` or `python -m local_ai_stack nightly-audit` |
-| n8n | Import `deploy/n8n/octo_nightly_audit.workflow.json` — HTTP trigger/status against the webhook bot (`OCTO_AUDIT_API_KEY`, `OCTO_AUDIT_API_BASE`) |
+| n8n | Import `deploy/n8n/workflows/octo_nightly_audit.workflow.json` — HTTP trigger/status against the webhook bot (`OCTO_AUDIT_API_KEY`, `OCTO_AUDIT_API_BASE`) |
 | Hermes | Skill at `deploy/hermes/octo-nightly-audit/SKILL.md` — **schedule only**, never edit during `/octo-spork fix` |
 
 Audit HTTP (bot must be running):

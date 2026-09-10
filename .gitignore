@@ -2,6 +2,7 @@
 .DS_Store
 .env
 deploy/local-ai/.env.local
+deploy/n8n/.env.local
 deploy/local-ai/docker-compose.override.yaml
 deploy/local-ai/docker-compose.port-sentinel.override.yml
 .local/

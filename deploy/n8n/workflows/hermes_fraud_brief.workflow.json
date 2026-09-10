@@ -1,0 +1,107 @@
+{
+  "name": "Hermes Fraud Brief",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Hong_Kong"
+  },
+  "meta": {
+    "description": "07:30 HKT: run_hermes_brief.sh fraud → Briefs on success, Alerts on failure. Scripts stay the truth."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "fraud-sched",
+      "name": "Daily 07:30 HKT",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "command": "bash \"$OCTO_SPORK_ROOT/deploy/n8n/scripts/run_hermes_brief.sh\" fraud"
+      },
+      "id": "fraud-run",
+      "name": "Run fraud brief",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "fraud-exit-eq-0",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fraud-if",
+      "name": "IF exit 0",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "command": "bash \"$OCTO_SPORK_ROOT/deploy/n8n/scripts/wa_send.sh\" --channel briefs --file \"$HERMES_FRAUD_ROOT/briefs/$(date +%F).md\""
+      },
+      "id": "fraud-briefs",
+      "name": "Send Briefs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [940, 200]
+    },
+    {
+      "parameters": {
+        "command": "bash \"$OCTO_SPORK_ROOT/deploy/n8n/scripts/wa_send.sh\" --channel alerts --text \"fraud brief failed\""
+      },
+      "id": "fraud-alerts",
+      "name": "Send Alerts",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [940, 420]
+    }
+  ],
+  "connections": {
+    "Daily 07:30 HKT": {
+      "main": [[{ "node": "Run fraud brief", "type": "main", "index": 0 }]]
+    },
+    "Run fraud brief": {
+      "main": [[{ "node": "IF exit 0", "type": "main", "index": 0 }]]
+    },
+    "IF exit 0": {
+      "main": [
+        [{ "node": "Send Briefs", "type": "main", "index": 0 }],
+        [{ "node": "Send Alerts", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "versionId": "1"
+}

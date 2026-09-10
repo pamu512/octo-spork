@@ -59,7 +59,7 @@ curl -H "X-API-Key: $OCTO_AUDIT_API_KEY" \
   "http://127.0.0.1:8008/octo/audit/status"
 ```
 
-From inside the n8n container use `http://host.docker.internal:8008` (see `deploy/n8n/octo_nightly_audit.workflow.json`).
+From inside the n8n container use `http://host.docker.internal:8008` (see `deploy/n8n/workflows/octo_nightly_audit.workflow.json`).
 
 ## Delivery
 
