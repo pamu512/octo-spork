@@ -45,8 +45,9 @@ class ContextDocsRouteTests(unittest.TestCase):
         self.assertEqual(r.status_code, 401)
 
     def test_docs_context_503_when_key_unconfigured(self) -> None:
-        import github_bot.app as app_module
         from fastapi.testclient import TestClient
+
+        import github_bot.app as app_module
 
         fake = _FakeRedis()
         with mock.patch.object(app_module.redis_async, "from_url", return_value=fake):
@@ -56,8 +57,9 @@ class ContextDocsRouteTests(unittest.TestCase):
         self.assertEqual(r.status_code, 503)
 
     def test_docs_context_json_empty_capture(self) -> None:
-        import github_bot.app as app_module
         from fastapi.testclient import TestClient
+
+        import github_bot.app as app_module
 
         fake = _FakeRedis()
         with mock.patch.object(app_module.redis_async, "from_url", return_value=fake):
@@ -72,8 +74,9 @@ class ContextDocsRouteTests(unittest.TestCase):
         self.assertEqual(data.get("status"), "empty")
 
     def test_docs_context_json_with_capture(self) -> None:
-        import github_bot.app as app_module
         from fastapi.testclient import TestClient
+
+        import github_bot.app as app_module
         from observability import prompt_capture as pc
 
         pc.record_ollama_review_prompt(

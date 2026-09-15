@@ -8,7 +8,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from observability.privacy_filter import redact_for_llm, unredact_response
+from observability.privacy_filter import unredact_response
 
 _LOG = logging.getLogger(__name__)
 
@@ -161,8 +161,13 @@ def _take_three_sentences(text: str) -> str:
 def _ollama_chat_summarize(text: str, *, base_url: str, model: str, timeout_sec: float = 90.0) -> str:
     import httpx
 
+    from observability.privacy_filter import redact_for_llm
+
+    # Redact secrets before they reach the local model; restore any that leak
+    # back verbatim as placeholders in the reply.
+    body_text, priv_map = redact_for_llm(text)
     cap = _summarizer_input_cap()
-    body = text if len(text) <= cap else text[:cap] + "\n\n… [truncated for summarizer context]"
+    body = body_text if len(body_text) <= cap else body_text[:cap] + "\n\n… [truncated for summarizer context]"
 
     payload = {
         "model": model,

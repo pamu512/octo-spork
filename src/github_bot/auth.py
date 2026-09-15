@@ -8,7 +8,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -72,7 +72,7 @@ class GitHubAuth:
 
     def _should_refresh(self, expires_at: datetime) -> bool:
         """True if the token expires within the refresh margin (or is already expired)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         remaining = expires_at - now
         return remaining <= _REFRESH_MARGIN
 
@@ -148,5 +148,5 @@ def _parse_github_datetime(value: str) -> datetime:
     normalized = value.replace("Z", "+00:00") if value.endswith("Z") else value
     dt = datetime.fromisoformat(normalized)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)

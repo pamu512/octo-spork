@@ -22,15 +22,15 @@ import asyncio
 import json
 import logging
 import os
-import sys
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -136,7 +136,7 @@ def _record_remediation_latency(
     end = time.time()
     ttr = max(0.0, end - scan_start)
     row = RemediationLatencyRow(
-        created_at_utc=datetime.now(timezone.utc)
+        created_at_utc=datetime.now(UTC)
         .replace(microsecond=0)
         .isoformat()
         .replace("+00:00", "Z"),

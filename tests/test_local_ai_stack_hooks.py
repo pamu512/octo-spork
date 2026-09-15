@@ -1,9 +1,7 @@
 import unittest
 
-from local_ai_stack.__main__ import (
-    _claude_agent_stack_available,
-    _lines_from_trivy_critical_report,
-)
+from local_ai_stack.__main__ import _claude_agent_stack_available
+from local_ai_stack.pre_push_scan import _lines_from_trivy_critical_report
 
 
 class LocalAiStackHookTests(unittest.TestCase):

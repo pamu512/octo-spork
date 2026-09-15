@@ -6,6 +6,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
@@ -34,7 +35,7 @@ class ObservabilityTracerTests(unittest.TestCase):
         self.assertIn("truncated", out)
 
     def test_no_endpoint_yields_inactive_export(self) -> None:
-        from observability.tracer import TracingManager, get_tracing_manager
+        from observability.tracer import TracingManager
 
         os.environ.pop("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", None)
         os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)

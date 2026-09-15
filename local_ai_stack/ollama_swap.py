@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 LIBRARY_BASE = "https://ollama.com/library/"
 DEFAULT_VRAM_HEADROOM = 1.15

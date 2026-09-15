@@ -1,14 +1,13 @@
-import unittest
-from pathlib import Path
 import importlib.util
+import os
 import subprocess
 import sys
-import types
 import tempfile
-import os
 import time
+import types
+import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 if "requests" not in sys.modules:
     fake_requests = types.SimpleNamespace(Session=lambda: None, post=lambda *args, **kwargs: None)

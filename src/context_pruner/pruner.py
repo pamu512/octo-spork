@@ -6,8 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from context_pruner import python_prune
-from context_pruner import tree_sitter_prune
+from context_pruner import python_prune, tree_sitter_prune
 from context_pruner.comments import omitted_comment
 
 

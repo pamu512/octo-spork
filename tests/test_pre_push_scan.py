@@ -1,7 +1,6 @@
 """Tests for :mod:`local_ai_stack.pre_push_scan` fail-closed behaviour."""
 from __future__ import annotations
 
-import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock

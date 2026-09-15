@@ -16,9 +16,9 @@ if str(SRC) not in sys.path:
 from claude_bridge.grounded_memory import (  # noqa: E402
     MANAGED_END,
     MANAGED_START,
-    GroundedMemoryManager,
     USER_END,
     USER_START,
+    GroundedMemoryManager,
     format_sarif_hotspots_section,
     merge_claude_md,
 )

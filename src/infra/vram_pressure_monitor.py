@@ -12,7 +12,8 @@ import os
 import platform
 import re
 import subprocess
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 _LOG = logging.getLogger(__name__)
 

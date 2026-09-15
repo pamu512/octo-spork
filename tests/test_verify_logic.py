@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+# Import script as module (filename has underscore)
+import importlib.util
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-# Import script as module (filename has underscore)
-import importlib.util
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SPEC = importlib.util.spec_from_file_location(

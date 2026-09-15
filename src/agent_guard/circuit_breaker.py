@@ -25,10 +25,11 @@ import re
 import signal
 import sys
 import traceback
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any
 
 _LOG = logging.getLogger(__name__)
 
@@ -204,7 +205,7 @@ class ExecutionDepthCircuitBreaker:
             "steps_since_terminal": self._steps_since_terminal,
             "terminal_markers": list(self._cfg.terminal_markers),
             "terminal_regex": self._cfg.terminal_regex,
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.now(UTC).isoformat(),
             "stack_dump": _collect_stack_dump(),
             "last_chunk_previews": list(self._last_chunks),
         }

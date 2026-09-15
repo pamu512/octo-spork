@@ -7,7 +7,7 @@ import re
 import sys
 import time
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 CHECK_RUN_NAME = "Octo-spork Analysis"
@@ -68,7 +68,7 @@ class OctoSporkAnalysisSession:
         self._before_api = before_api_call
         self._run: Any | None = None
         self._t0 = time.monotonic()
-        self._started_wall = datetime.now(timezone.utc)
+        self._started_wall = datetime.now(UTC)
         self._critical = False
         self._system_offline_reason: str | None = None
         self._finished = False
@@ -177,7 +177,7 @@ class OctoSporkAnalysisSession:
             self._run.edit(
                 status="completed",
                 conclusion=conclusion,
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
                 output={
                     "title": title[:255],
                     "summary": summary[:65535],

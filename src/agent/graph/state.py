@@ -6,7 +6,6 @@ from typing import TypedDict
 
 from langchain_core.messages import BaseMessage
 
-
 # --- SARIF 2.1.0 fragments matching JSON emitted by Trivy filesystem scans (subset of OASIS SARIF) ---
 
 

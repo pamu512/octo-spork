@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -377,7 +377,7 @@ def run_port_sentinel(
     yaml_root.setdefault("x-octo-port-sentinel", {})
     assert isinstance(yaml_root["x-octo-port-sentinel"], dict)
     yaml_root["x-octo-port-sentinel"]["version"] = 1
-    yaml_root["x-octo-port-sentinel"]["generated_at"] = datetime.now(timezone.utc).isoformat()
+    yaml_root["x-octo-port-sentinel"]["generated_at"] = datetime.now(UTC).isoformat()
 
     for c in conflicts:
         port = int(c.port)

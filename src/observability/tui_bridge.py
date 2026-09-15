@@ -18,7 +18,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-
 _LOG_LOCK = threading.Lock()
 _DEFAULT_REL_LOG = Path(".local/octo_fopoon_trace.jsonl")
 _DEFAULT_REL_STOP = Path(".local/octo_agent_stop_request")

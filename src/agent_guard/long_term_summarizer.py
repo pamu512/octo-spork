@@ -24,7 +24,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -186,14 +186,14 @@ class LongTermSummarizer:
 
     def archive_full_history(self, thread_id: str, prior_values: dict[str, Any], *, prior_tokens: int) -> Path:
         """Write full ``values`` JSON for auditing."""
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         name = f"{_safe_thread_slug(thread_id)}_{ts}.json"
         path = self._cold_dir / name
         payload = {
             "version": 1,
             "kind": "memory_consolidation_full_history",
             "thread_id": thread_id,
-            "archived_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "archived_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
             "prior_estimated_tokens": prior_tokens,
             "values": prior_values,
         }
@@ -285,7 +285,7 @@ class LongTermSummarizer:
         out = copy.deepcopy(values)
         out["messages"] = self.replacement_messages(bullets, cold_path)
         out["octo_memory_consolidation"] = {
-            "consolidated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "consolidated_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
             "cold_storage_path": str(cold_path),
             "prior_estimated_tokens": prior_tokens,
             "summarizer_model": self._model,

@@ -1,0 +1,30 @@
+[project]
+name = "octo-spork"
+version = "0.1.0"
+description = "Sovereign, local-first AI stack for repo hardening & agentic remediation"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "scripts", "local_ai_stack"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+# E501 handled by formatter where possible; long docstrings/URLs tolerated for now.
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+# Gradual typing: enforce only in new/strict modules via per-module overrides below.
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.uv]
+dev-dependencies = ["pytest>=8"]

@@ -12,6 +12,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
 _LOG = logging.getLogger(__name__)
 
 CLAUDE_MD_FILENAME = "CLAUDE.md"

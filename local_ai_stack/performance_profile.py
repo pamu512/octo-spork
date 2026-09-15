@@ -8,7 +8,7 @@ import os
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -291,7 +291,7 @@ def run_benchmark_suite(
     winner, win_score = pick_most_stable_model(rows)
     out: dict[str, Any] = {
         "version": 1,
-        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "ollama_base_url": base,
         "tooling_root": str((tooling_root or default_tooling_root()).resolve()),
         "prompt_target_tokens": int(prompt_target_tokens),

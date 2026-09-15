@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -187,7 +187,7 @@ Produce the updated **Developer Style Guide** as markdown bullets reflecting tea
 
 
 def _correction_fingerprint(before: str, after: str, comment_id: int | None) -> str:
-    h = hashlib.sha256(f"{comment_id}:{before}:{after}".encode("utf-8")).hexdigest()[:16]
+    h = hashlib.sha256(f"{comment_id}:{before}:{after}".encode()).hexdigest()[:16]
     return h
 
 
@@ -229,7 +229,7 @@ def apply_learned_correction(
         return False
 
     entry = {
-        "at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "at": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "repo": repo_full,
         "editor": editor_login,
         "fingerprint": fp,

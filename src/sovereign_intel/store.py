@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import os
 import threading
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 _LOCK = threading.Lock()
 
@@ -23,7 +24,7 @@ def network_store_path() -> Path:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def load_network() -> dict[str, Any]:

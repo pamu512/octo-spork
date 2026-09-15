@@ -17,8 +17,9 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any
 
 _LOG = logging.getLogger(__name__)
 

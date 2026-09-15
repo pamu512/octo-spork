@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from local_ai_stack.port_sentinel import (
     PortConflict,
     _merge_override_services,

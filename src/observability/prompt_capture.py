@@ -9,7 +9,6 @@ import threading
 import time
 from typing import Any
 
-
 _lock = threading.Lock()
 _record: dict[str, Any] | None = None
 

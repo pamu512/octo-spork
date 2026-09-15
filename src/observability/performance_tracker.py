@@ -27,10 +27,11 @@ import os
 import subprocess
 import threading
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any
 
 _LOG = logging.getLogger(__name__)
 
@@ -239,7 +240,7 @@ def _emit_compression_event(reason: str, stats: dict[str, Any]) -> None:
         pass
     try:
         if os.environ.get("OCTO_AUDIT_SQLITE", "").strip().lower() in {"1", "true", "yes", "on"}:
-            from observability.audit_sqlite import record_event, get_audit_session
+            from observability.audit_sqlite import get_audit_session, record_event
 
             sid = get_audit_session()
             if sid:

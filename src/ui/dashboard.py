@@ -150,7 +150,7 @@ def _docker_ps_lines() -> list[str]:
 def build_app_class():
     from textual.app import App, ComposeResult
     from textual.binding import Binding
-    from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+    from textual.containers import Horizontal, Vertical, VerticalScroll
     from textual.widgets import Button, Footer, Header, RichLog, Static
 
     class FopoonDashboard(App[None]):

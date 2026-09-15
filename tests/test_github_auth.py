@@ -7,7 +7,7 @@ import json
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -17,7 +17,6 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from github_bot.auth import GitHubAuth, _parse_github_datetime  # noqa: E402
-
 
 MINIMAL_PEM = """-----BEGIN RSA PRIVATE KEY-----
 MIIBOgIBAAJBALRiMLAHudeSA1iohZFnISrWTDwtPDMAzMJDIgJTIrYTSySoRWF40
@@ -30,7 +29,7 @@ uQQvhxtylVzSOWpYgVvXyXwWvXyXwWvXyXwWvXyXwWvXyXwWvXyXwWvXyXwECIQDY
 class ParseGithubTimeTests(unittest.TestCase):
     def test_z_suffix(self) -> None:
         dt = _parse_github_datetime("2026-05-06T12:30:45Z")
-        self.assertEqual(dt.tzinfo, timezone.utc)
+        self.assertEqual(dt.tzinfo, UTC)
 
 
 class GitHubAuthCacheTests(unittest.TestCase):
@@ -70,7 +69,7 @@ class GitHubAuthCacheTests(unittest.TestCase):
         def urlopen_side_effect(req: object, timeout: float = 60) -> io.BytesIO:
             calls["n"] += 1
             if calls["n"] == 1:
-                exp_dt = datetime.now(timezone.utc) + timedelta(minutes=3)
+                exp_dt = datetime.now(UTC) + timedelta(minutes=3)
                 exp = exp_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
             else:
                 exp = "2099-06-01T00:00:00Z"

@@ -8,9 +8,9 @@ import os
 import platform
 import re
 import subprocess
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
 
 _LOG = logging.getLogger(__name__)
 

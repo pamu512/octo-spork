@@ -6,7 +6,7 @@ import html
 import json
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -92,7 +92,7 @@ async def docs_context(
         return HTMLResponse(body)
 
     wall = float(snap.get("captured_wall", 0))
-    iso = datetime.fromtimestamp(wall, tz=timezone.utc).isoformat()
+    iso = datetime.fromtimestamp(wall, tz=UTC).isoformat()
     payload = {
         "status": "ok",
         "captured_at": iso,

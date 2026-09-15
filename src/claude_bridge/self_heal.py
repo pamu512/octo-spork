@@ -151,7 +151,7 @@ def render_grounded_failure_report(outcome: SelfHealOutcome) -> str:
         "",
         f"- **Workspace:** `{outcome.workspace}`",
         f"- **Max fix attempts:** {outcome.max_fix_attempts}",
-        f"- **Outcome:** tests still failing after exhausting the SelfHeal loop.",
+        "- **Outcome:** tests still failing after exhausting the SelfHeal loop.",
         "",
         "## What ran",
         "",

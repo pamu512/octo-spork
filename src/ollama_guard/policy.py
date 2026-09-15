@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass
+
 from ollama_guard.client import ollama_list_tags, ollama_show
 from ollama_guard.estimate import (
     estimate_weight_mib,

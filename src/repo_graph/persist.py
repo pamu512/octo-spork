@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any
 
 from repo_graph.graph import RepoGraph, graph_from_jsonable, graph_to_jsonable
 
@@ -25,7 +24,7 @@ def default_data_dir() -> Path:
 def cache_path_for(scan_root: Path, revision_hint: str) -> Path:
     import hashlib
 
-    key = f"{scan_root.resolve()}::{revision_hint}".encode("utf-8")
+    key = f"{scan_root.resolve()}::{revision_hint}".encode()
     short = hashlib.sha256(key).hexdigest()[:20]
     safe_rev = "".join(c if c.isalnum() or c in "-._" else "_" for c in revision_hint)[:48]
     name = f"{short}_{safe_rev or 'norev'}.json"

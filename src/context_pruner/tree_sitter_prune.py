@@ -5,11 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from tree_sitter import Node
+from tree_sitter import Node, Tree
 
 from context_pruner.comments import omitted_comment
 from repo_graph.parsers import javascript_parser, tsx_parser, typescript_parser
-
 
 SUPPORTED_SUFFIXES = frozenset({".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"})
 

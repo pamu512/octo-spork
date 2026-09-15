@@ -9,7 +9,6 @@ from pathlib import Path
 from unittest import mock
 
 import yaml
-
 from local_ai_stack.resource_hardener import (
     build_override_document,
     compute_resources,

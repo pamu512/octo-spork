@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -182,7 +182,7 @@ def run_benchmark(
         notes = str(result.get("answer", ""))[:1200].replace("\n", " ").strip()
 
     row = {
-        "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "git_url": git_url,
         "base_ref": base,
         "head_ref": head,

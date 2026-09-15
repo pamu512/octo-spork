@@ -66,7 +66,11 @@ class CircuitBreakerTests(unittest.TestCase):
         self.assertEqual(len(out), 2)
 
     def test_iter_with_circuit(self) -> None:
-        from agent_guard.circuit_breaker import CircuitBreakerConfig, ExecutionDepthCircuitBreaker, iter_with_circuit
+        from agent_guard.circuit_breaker import (
+            CircuitBreakerConfig,
+            ExecutionDepthCircuitBreaker,
+            iter_with_circuit,
+        )
 
         cfg = CircuitBreakerConfig(max_steps_without_terminal=100)
         br = ExecutionDepthCircuitBreaker(cfg)

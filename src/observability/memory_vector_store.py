@@ -312,7 +312,7 @@ class VectorMemory:
         chunk_text_content: str,
     ) -> str:
         h = hashlib.sha256(
-            f"{owner}|{repo}|{revision_sha}|{query}|{kind}|{chunk_index}|{chunk_text_content}".encode("utf-8")
+            f"{owner}|{repo}|{revision_sha}|{query}|{kind}|{chunk_index}|{chunk_text_content}".encode()
         ).hexdigest()
         return f"mem_{h[:24]}"
 

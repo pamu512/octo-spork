@@ -4,7 +4,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 MODULE_PATH = (
     Path(__file__).resolve().parents[1]
     / "overlays"

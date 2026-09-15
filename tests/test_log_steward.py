@@ -7,7 +7,6 @@ import time
 from pathlib import Path
 
 import pytest
-
 from local_ai_stack.log_steward import (
     ARCHIVE_MAX_AGE_SECONDS,
     SIZE_THRESHOLD_BYTES,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+
 from context_pruner.comments import omitted_comment
 
 

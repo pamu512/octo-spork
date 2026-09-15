@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
 import os
 import re
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -108,7 +108,7 @@ def report_pr_processing_failure(
     log_raw = (os.environ.get("OCTO_SPORK_FAILURE_LOG") or "").strip()
     if log_raw:
         log_path = Path(log_raw).expanduser()
-        stamp = datetime.now(timezone.utc).isoformat()
+        stamp = datetime.now(UTC).isoformat()
         try:
             _append_local_failure_log(
                 log_path,

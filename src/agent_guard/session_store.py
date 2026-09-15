@@ -29,7 +29,7 @@ import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 _LOG = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ _DEFAULT_TTL_SEC = 7 * 24 * 3600
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def _json_default(o: Any) -> Any:

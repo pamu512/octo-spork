@@ -41,7 +41,7 @@ def _default_embedding_model() -> str:
 
 def _fingerprint(rejected: str, corrected: str, repo_full: str, comment_id: int | None) -> str:
     return hashlib.sha256(
-        f"{comment_id}|{repo_full}|{rejected}|{corrected}".encode("utf-8")
+        f"{comment_id}|{repo_full}|{rejected}|{corrected}".encode()
     ).hexdigest()
 
 
@@ -62,7 +62,11 @@ class CorrectionLedger:
         embed_model: str | None = None,
         persist_directory: Path | None = None,
     ) -> None:
-        from observability.memory_vector_store import _ollama_embed, _persistent_chroma_client, chroma_persist_path
+        from observability.memory_vector_store import (
+            _ollama_embed,
+            _persistent_chroma_client,
+            chroma_persist_path,
+        )
 
         self._ollama_base = ollama_base_url.rstrip("/")
         self._embed_model = (embed_model or _default_embedding_model()).strip()

@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 
 from local_ai_stack.model_fallback import (
     DEGRADED_INSTRUCTION,
+    _looks_like_memory_or_vram_failure,
     pick_small_coder_fallback,
     run_ollama_pull_with_model_fallback,
-    _looks_like_memory_or_vram_failure,
 )
 
 
@@ -47,7 +47,6 @@ class ModelFallbackTests(unittest.TestCase):
             with patch("local_ai_stack.__main__._rewrite_env_file_string_values"):
                 with patch("local_ai_stack.__main__._configure_agenticseek_ini"):
                     with patch("local_ai_stack.__main__._print"):
-                        import local_ai_stack.__main__ as main_mod
 
                         out = run_ollama_pull_with_model_fallback(
                             root,

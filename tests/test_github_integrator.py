@@ -3,7 +3,6 @@ import sys
 import unittest
 from pathlib import Path
 
-
 MODULE_PATH = Path(__file__).resolve().parents[1] / "github_integrator.py"
 SPEC = importlib.util.spec_from_file_location("github_integrator", MODULE_PATH)
 mod = importlib.util.module_from_spec(SPEC)

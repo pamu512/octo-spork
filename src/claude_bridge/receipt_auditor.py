@@ -8,7 +8,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 WARN_PREFIX = "⚠️ Grounding Mismatch"
 
 # Dotted extensions plus extensionless repo files often cited in sessions.

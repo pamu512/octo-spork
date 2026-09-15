@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-
 _PARAM_RE = re.compile(
     r"^\s*([\d.]+)\s*([PTGMKB])?\s*$",
     re.IGNORECASE,

@@ -12,8 +12,9 @@ import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, Iterable
+from typing import Any, Final
 
 _LOG = logging.getLogger(__name__)
 

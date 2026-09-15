@@ -28,8 +28,8 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 
 def _repo_root_from_env_or_arg(raw: str | None) -> Path:

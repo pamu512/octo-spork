@@ -5,8 +5,9 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 _LOG = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ def coerce_ledger_metadata(raw: Mapping[str, Any]) -> LedgerMetadata:
 
 
 def migrate_reset_ledger_collection(
-    client: "chromadb.PersistentClient",
+    client: chromadb.PersistentClient,
     collection_name: str,
     *,
     log_wipe: bool = True,
@@ -181,7 +182,7 @@ def upsert_verified_pattern(
     emb = _ollama_embed(body, url, model)
     rid = pattern_id or (
         "ledger_"
-        + hashlib.sha256(f"{cve}|{path}|{body}".encode("utf-8")).hexdigest()[:24]
+        + hashlib.sha256(f"{cve}|{path}|{body}".encode()).hexdigest()[:24]
     )
     meta = coerce_ledger_metadata(
         {"cve_id": cve or "UNKNOWN", "file_path": path, "is_verified": True}

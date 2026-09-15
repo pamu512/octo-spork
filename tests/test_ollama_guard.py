@@ -5,7 +5,11 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from ollama_guard.estimate import infer_params_from_name, parse_parameter_size, quant_bytes_per_param
+from ollama_guard.estimate import (
+    infer_params_from_name,
+    parse_parameter_size,
+    quant_bytes_per_param,
+)
 from ollama_guard.policy import analyze_model, candidate_quant_tags
 
 

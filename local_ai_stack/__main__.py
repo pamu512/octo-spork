@@ -6,14 +6,14 @@ import importlib.util
 import ipaddress
 import json
 import logging
-import shutil
 import os
 import platform
 import re
 import secrets
 import shlex
-import stat
+import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -21,9 +21,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlparse, urlunparse
-
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO_LOCAL_DATA_DIR = ROOT / ".local" / "data"
@@ -1051,7 +1049,7 @@ def _tcp_port_is_in_use(host: str, port: int, connect_timeout: float = 0.4) -> b
             raise ValueError("connect_timeout must be a finite number") from exc
         try:
             result = sock.connect_ex((host_s, int(port)))
-        except OSError as exc:
+        except OSError:
             return False
         return result == 0
     finally:
@@ -1546,13 +1544,13 @@ class StackOrchestrator:
             raise RuntimeError("Port conflict checking failed due to an unexpected error.") from exc
         try:
             env_values, agenticseek_path = bootstrap(self._env_file)
-        except Exception as exc:
+        except Exception:
             self._logger.exception("Bootstrap failed")
             raise
         process_env = _merge_process_env(env_values)
         try:
             _start_ollama_if_needed(env_values, process_env)
-        except Exception as exc:
+        except Exception:
             self._logger.exception("Starting Ollama on the host failed")
             raise
         try:
@@ -1788,10 +1786,6 @@ def _ollama_host_log_snippet(*, tail_lines: int = 80, max_chars: int = 12000) ->
     return text
 
 
-from local_ai_stack.pre_push_scan import (  # noqa: E402
-    _lines_from_trivy_critical_report,
-    collect_trivy_critical_evidence,
-)
 
 
 def _hook_probe_n8n_ollama_reachability(
@@ -1881,7 +1875,6 @@ def run_hook_infra_health_probe(env_file: Path) -> tuple[bool, list[str]]:
 from local_ai_stack.pre_push_scan import (  # noqa: E811
     command_install_hook,
     command_pre_push_scan,
-    run_pre_push_scan,
 )
 
 

@@ -6,7 +6,6 @@ import time
 from unittest.mock import patch
 
 import pytest
-
 from local_ai_stack.deep_probe import (
     deep_probe_once,
     probe_ollama_api_tags,

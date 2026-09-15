@@ -9,7 +9,7 @@ import sqlite3
 import threading
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -174,7 +174,7 @@ def set_aggressive_pruning_active(
         "active": True,
         "reason": reason,
         "until_unix": until,
-        "set_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "set_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     }
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     _LOG.warning("Aggressive context pruning enabled until %s (%s)", until, reason)

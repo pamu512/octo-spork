@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import tempfile
@@ -20,7 +19,10 @@ class SovereignIntelTests(unittest.TestCase):
         os.environ.pop("OCTO_SPORK_REPO_ROOT", None)
 
     def test_pattern_names_from_other_repos(self) -> None:
-        from sovereign_intel.store import pattern_names_from_other_repos, record_critical_pattern_hits
+        from sovereign_intel.store import (
+            pattern_names_from_other_repos,
+            record_critical_pattern_hits,
+        )
 
         with tempfile.TemporaryDirectory() as td:
             base = Path(td)

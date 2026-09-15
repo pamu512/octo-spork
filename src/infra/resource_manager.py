@@ -18,7 +18,6 @@ import urllib.request
 import warnings
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin
 
 _LOG = logging.getLogger(__name__)
 

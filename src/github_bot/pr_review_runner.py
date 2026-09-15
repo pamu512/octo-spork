@@ -126,7 +126,7 @@ def run_webhook_pr_review_sync(envelope: dict[str, Any]) -> None:
     ]
     pr_context = "\n".join(ctx_parts)
 
-    from github_bot.review_refiner import refinement_enabled, refine_review_or_original
+    from github_bot.review_refiner import refine_review_or_original, refinement_enabled
 
     ws = Path(os.environ.get("OCTO_SPORK_REPO_ROOT") or "").expanduser()
     if str(ws).strip():

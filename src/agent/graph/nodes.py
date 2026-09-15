@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent.graph.state import AgentState
-from remediation.rescan import run_trivy_scan, verify_cve_resolved
-from remediation.verifier import run_test_suite
 from agent.tools.file_write import AtomicWriteFailed, FileWriteTool
 from agent.tools.terminal import TerminalTool
+from remediation.rescan import run_trivy_scan, verify_cve_resolved
+from remediation.verifier import run_test_suite
 
 _ERR_NOT_FOUND = "ERROR: Tool not found."
 
@@ -118,7 +119,7 @@ def generate_system_prompt(state: AgentState) -> str:
     )
 
 
-def enforce_tool_format(state: AgentState) -> Dict[str, Any]:
+def enforce_tool_format(state: AgentState) -> dict[str, Any]:
     """Intercept LLM output to prevent 'consultant mode'.
 
     If the model sends markdown bash blocks instead of tool calls, append a

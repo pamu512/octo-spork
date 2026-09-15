@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 _BACKUP_ROOT = Path("/tmp/octo_backups")
@@ -114,7 +114,7 @@ class FileWriteTool:
         """
         src = Path(filepath)
         _BACKUP_ROOT.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+        stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
         dest = _BACKUP_ROOT / f"{stamp}_{src.name}.bak"
         try:
             if not src.is_file():

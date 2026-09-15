@@ -6,6 +6,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
@@ -34,8 +35,8 @@ class DotSvgTests(unittest.TestCase):
         self.assertEqual(_cycle_edge_set(pairs, sccs), set())
 
     def test_repo_graph_to_dot_colors_cycle_edges(self) -> None:
-        from repo_graph.graph import RepoGraph
         from repo_graph.dot_svg import repo_graph_to_dot
+        from repo_graph.graph import RepoGraph
 
         g = RepoGraph(
             scan_root="/tmp",

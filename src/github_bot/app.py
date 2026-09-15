@@ -20,7 +20,6 @@ from github_bot.audit_routes import router as audit_router
 from github_bot.auth import GitHubAuth
 from github_bot.context_docs import router as context_docs_router
 from github_bot.delivery_cache import is_valid_delivery_id, try_claim_delivery
-from github_bot.temp_clone_cleanup import cleanup_stale_temp_clones
 from github_bot.review_queue import (
     default_pr_review_worker,
     octo_spork_issue_comment_command,
@@ -36,6 +35,7 @@ from github_bot.style_prefs import (
     sender_login,
     should_learn_style_from_issue_comment,
 )
+from github_bot.temp_clone_cleanup import cleanup_stale_temp_clones
 
 load_dotenv()
 _REPO_ROOT = Path(__file__).resolve().parents[2]

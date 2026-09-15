@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Pattern
+from re import Pattern
 
 
 def is_enabled() -> bool:

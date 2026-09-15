@@ -10,7 +10,7 @@ import shutil
 import time
 from collections import defaultdict
 from collections.abc import Callable, Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,8 +58,8 @@ def _date_key_for_file(path: Path) -> str:
     try:
         ts = path.stat().st_mtime
     except OSError:
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        return datetime.now(UTC).strftime("%Y-%m-%d")
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
 
 
 def _concatenate_logs_by_date(logs_dir: Path, announce: Callable[[str], None] | None) -> int:

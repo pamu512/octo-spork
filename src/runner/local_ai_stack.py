@@ -28,7 +28,7 @@ def _memory_pressure_fallback_banner(selected_model: str, default_model: str) ->
         border,
         "  WARNING: UNIFIED MEMORY PRESSURE — FALLBACK MODEL ACTIVE",
         "",
-        f"  Host memory pressure is HIGH (swap-backed pressure detected). The stack is using",
+        "  Host memory pressure is HIGH (swap-backed pressure detected). The stack is using",
         f"  '{selected_model}' instead of the default large model '{default_model}'.",
         "",
         "  Expect faster, lower-footprint runs with reduced reasoning depth. Free RAM or swap,",
