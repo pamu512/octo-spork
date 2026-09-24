@@ -29,9 +29,9 @@ LOG="${LOG_DIR}/nightly_audit_${STAMP}.log"
 {
   echo "== nightly_audit ${STAMP} =="
   echo "root=${ROOT}"
-  python3 -m local_ai_stack doctor --env-file "$ENV_FILE" --repo "$REPO" --strict || true
-  python3 -m local_ai_stack status --env-file "$ENV_FILE" || true
-  python3 -m local_ai_stack pre-push-scan --env-file "$ENV_FILE" --repo "$REPO" || true
+  python3 -m local_ai_stack doctor --env-file "$ENV_FILE" --repo "$REPO" --strict
+  python3 -m local_ai_stack status --env-file "$ENV_FILE"
+  python3 -m local_ai_stack pre-push-scan --env-file "$ENV_FILE" --repo "$REPO"
 } 2>&1 | tee "$LOG"
 
 echo "Wrote ${LOG}"

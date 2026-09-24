@@ -64,7 +64,7 @@ python -m local_ai_stack nightly-audit --repo .
 # or: ./scripts/nightly_audit.sh
 ```
 
-Runs doctor (strict), status, and pre-push-scan; logs under `logs/nightly_audit_*.log`.
+Runs doctor (strict), status, and pre-push-scan fail-closed (any step failure exits nonzero); logs under `logs/nightly_audit_*.log`.
 
 Verified remediations are upserted into the Chroma ledger (`upsert_verified_pattern`) when RescanLoop passes; later fixes pull them via `query_verified_patterns` (with optional fallback to review memory).
 
