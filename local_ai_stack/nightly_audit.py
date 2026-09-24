@@ -1,7 +1,7 @@
 """Thin wrapper around ``scripts/nightly_audit.sh`` for cron / Hermes.
 
 Propagates the script returncode. Missing script → 2.
-Does not swallow failures (``|| true`` stays in the shell script, parked).
+Does not swallow failures (the shell script is fail-closed; no ``|| true``).
 """
 from __future__ import annotations
 
