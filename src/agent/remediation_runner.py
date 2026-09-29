@@ -30,9 +30,9 @@ def run_langgraph_remediation_agent(
 
     prev = Path.cwd()
     prev_ws = os.environ.get("OCTO_WORKSPACE")
-    os.environ["OCTO_WORKSPACE"] = str(ws)
-    os.chdir(ws)
     try:
+        os.environ["OCTO_WORKSPACE"] = str(ws)
+        os.chdir(ws)
         graph = build_remediation_graph()
         state = initial_agent_state(
             brief=brief,

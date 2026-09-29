@@ -69,6 +69,20 @@ class FileWriteToolWorkspaceTests(unittest.TestCase):
                     tool.write_content(str(dest), "nope")
             self.assertFalse(dest.exists())
 
+    def test_write_respects_octo_workspace_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            inside = workspace / "in.txt"
+            outside = Path(tmp) / "out.txt"
+            tool = FileWriteTool()
+            with mock.patch.dict(os.environ, {"OCTO_WORKSPACE": str(workspace)}, clear=False):
+                tool.write_content(str(inside), "ok")
+                with self.assertRaises(AtomicWriteFailed):
+                    tool.write_content(str(outside), "nope")
+            self.assertEqual(inside.read_text(encoding="utf-8"), "ok")
+            self.assertFalse(outside.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
