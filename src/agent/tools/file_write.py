@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _BACKUP_ROOT = Path("/tmp/octo_backups")
+_WORKSPACE_ENV = "OCTO_WORKSPACE"
 
 
 class AtomicWriteFailed(OSError):
@@ -22,10 +23,43 @@ class AtomicWriteFailed(OSError):
 class FileWriteTool:
     """Persist content to a path with atomic replace and backup rollback."""
 
-    __slots__ = ("_pending_restore_backup",)
+    __slots__ = ("_pending_restore_backup", "_workspace_root")
 
-    def __init__(self) -> None:
+    def __init__(self, workspace_root: str | Path | None = None) -> None:
         self._pending_restore_backup: Path | None = None
+        text = "" if workspace_root is None else str(workspace_root).strip()
+        self._workspace_root: Path | None = Path(text).expanduser() if text else None
+
+    def _resolved_workspace(self) -> Path | None:
+        if self._workspace_root is not None:
+            return self._workspace_root.expanduser().resolve()
+        raw = (os.environ.get(_WORKSPACE_ENV) or "").strip()
+        if not raw:
+            return None
+        return Path(raw).expanduser().resolve()
+
+    def _confine_path(self, filepath: str) -> Path:
+        workspace = self._resolved_workspace()
+        if workspace is None:
+            raise AtomicWriteFailed(
+                "workspace root is not configured; refusing write",
+                filepath=filepath,
+            )
+        raw = Path(filepath)
+        candidate = raw if raw.is_absolute() else workspace / raw
+        try:
+            resolved = candidate.resolve()
+        except OSError as exc:
+            raise AtomicWriteFailed(
+                f"invalid path for {filepath!r}: {exc}",
+                filepath=filepath,
+            ) from exc
+        if not resolved.is_relative_to(workspace):
+            raise AtomicWriteFailed(
+                f"write outside workspace rejected: {filepath!r} is not under {workspace}",
+                filepath=filepath,
+            )
+        return resolved
 
     def write_content(self, filepath: str, content: str) -> None:
         """Write ``content`` to ``filepath`` atomically using a temporary file.
@@ -42,10 +76,11 @@ class FileWriteTool:
             failure, :meth:`_restore_backup` runs when a backup exists; the raised exception chains
             the original error unless restore also fails (then both are described in the message).
         """
-        path = Path(filepath)
+        path = self._confine_path(filepath)
+        confined = str(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        backup_path = self._create_backup(filepath)
+        backup_path = self._create_backup(confined)
         self._pending_restore_backup = backup_path
 
         tmp_path: Path | None = None
@@ -68,7 +103,7 @@ class FileWriteTool:
             if tmp_path is not None:
                 tmp_path.unlink(missing_ok=True)
             try:
-                self._restore_backup(filepath)
+                self._restore_backup(confined)
             except OSError as restore_exc:
                 raise AtomicWriteFailed(
                     f"atomic write failed for {filepath!r}; backup restore failed: {restore_exc}",
