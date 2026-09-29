@@ -6,6 +6,8 @@ import os
 import shlex
 import subprocess
 
+from agent.tools.security_guard import SecurityValidator, SecurityViolationError
+
 _COMMAND_TIMEOUT_SECONDS = 30
 _MAX_SANITIZED_OUTPUT_CHARS = 4000
 _TRUNCATION_SUFFIX = "\n...[TRUNCATED FOR MEMORY LIMITS]..."
@@ -45,7 +47,7 @@ class TerminalTool:
         environment-variable overlays, and encoding choices used when decoding subprocess byte
         streams before sanitization.
         """
-        pass
+        self._validator = SecurityValidator()
 
     def execute(self, command: str) -> dict:
         """Execute a shell command string via ``subprocess`` and return structured results.
@@ -90,6 +92,15 @@ class TerminalTool:
         Implementation will ensure these keys are always present so callers can rely on stable
         dictionary shape without optional keys.
         """
+        try:
+            self._validator.validate_command(command)
+        except SecurityViolationError as exc:
+            return {
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": self._sanitize_output(f"security violation: {exc}"),
+            }
+
         try:
             argv = shlex.split(command, posix=os.name != "nt")
         except ValueError as exc:

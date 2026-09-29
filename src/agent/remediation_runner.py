@@ -29,8 +29,10 @@ def run_langgraph_remediation_agent(
         raise RuntimeError(f"LangGraph remediation workspace missing: {ws}")
 
     prev = Path.cwd()
-    os.chdir(ws)
+    prev_ws = os.environ.get("OCTO_WORKSPACE")
     try:
+        os.environ["OCTO_WORKSPACE"] = str(ws)
+        os.chdir(ws)
         graph = build_remediation_graph()
         state = initial_agent_state(
             brief=brief,
@@ -44,6 +46,10 @@ def run_langgraph_remediation_agent(
         _LOG.exception("LangGraph remediation failed")
         return 1, f"LangGraph remediation failed: {exc}"
     finally:
+        if prev_ws is None:
+            os.environ.pop("OCTO_WORKSPACE", None)
+        else:
+            os.environ["OCTO_WORKSPACE"] = prev_ws
         try:
             os.chdir(prev)
         except OSError:
