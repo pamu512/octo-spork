@@ -33,7 +33,6 @@ from local_ai_stack.env_validation import (
 ROOT = Path(__file__).resolve().parents[1]
 REPO_LOCAL_DATA_DIR = ROOT / ".local" / "data"
 DEFAULT_ENV_FILE = ROOT / "deploy" / "local-ai" / ".env.local"
-EXAMPLE_ENV_FILE = ROOT / "deploy" / "local-ai" / ".env.example"
 COMPOSE_PROJECT_NAME = "octo-spork-local-ai"
 # Applied via docker-compose.project-labels.yml for ``force-clean`` discovery.
 OCTO_SPORK_PROJECT_LABEL_KEY = "com.octospork.project"

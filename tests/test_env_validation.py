@@ -221,6 +221,7 @@ def test_main_reexports_same_objects_and_does_not_redefine() -> None:
     src = _MAIN_PY.read_text(encoding="utf-8")
     for name in (
         "def _parse_env_file",
+        "def _ensure_env_file",
         "def _collect_env_validation_errors",
         "def validate_config",
         "def _seed_env_secrets",
