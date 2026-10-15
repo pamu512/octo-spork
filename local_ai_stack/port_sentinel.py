@@ -20,6 +20,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from local_ai_stack.port_plan import (
+    _format_ollama_local_url_with_port,
+    _http_get_status,
+    _ollama_tags_probe_url_from_env,
+    _parse_ollama_local_url,
+    _parse_positive_int_from_env,
+    _pick_first_free_tcp_port,
+    _stack_port_plan,
+)
+from local_ai_stack import port_plan as _port_plan
+
 PORT_SENTINEL_OVERRIDE_REL = Path("deploy") / "local-ai" / "docker-compose.port-sentinel.override.yml"
 REQUIRED_PORTS: tuple[int, ...] = (11434, 5432, 6379, 8080)
 
@@ -212,14 +223,13 @@ def _import_main_helpers() -> Any:
 
 
 def _stack_remappable_keys_for_port(port: int, env_values: dict[str, str]) -> tuple[str, ...] | None:
-    m = _import_main_helpers()
-    _, ollama_port = m._parse_ollama_local_url(env_values.get("OLLAMA_LOCAL_URL", "http://127.0.0.1:11434"))
+    _, ollama_port = _parse_ollama_local_url(env_values.get("OLLAMA_LOCAL_URL", "http://127.0.0.1:11434"))
     if port == int(ollama_port):
         return ("OLLAMA_LOCAL_URL", "OLLAMA_HOST")
-    sx = m._parse_positive_int_from_env(env_values.get("SEARXNG_PORT"), "SEARXNG_PORT", 8080)
+    sx = _parse_positive_int_from_env(env_values.get("SEARXNG_PORT"), "SEARXNG_PORT", 8080)
     if port == int(sx):
         return ("SEARXNG_PORT",)
-    pg = m._parse_positive_int_from_env(env_values.get("POSTGRES_PORT"), "POSTGRES_PORT", 5433)
+    pg = _parse_positive_int_from_env(env_values.get("POSTGRES_PORT"), "POSTGRES_PORT", 5433)
     if port == int(pg):
         return ("POSTGRES_PORT",)
     if port == 6379:
@@ -231,10 +241,9 @@ def _stack_remappable_keys_for_port(port: int, env_values: dict[str, str]) -> tu
 def _should_skip_ollama_busy(port: int, env_values: dict[str, str]) -> bool:
     if port != 11434:
         return False
-    m = _import_main_helpers()
-    probe = m._ollama_tags_probe_url_from_env(env_values)
+    probe = _ollama_tags_probe_url_from_env(env_values)
     try:
-        status = m._http_get_status(probe, timeout=5.0)
+        status = _http_get_status(probe, timeout=5.0)
     except ValueError:
         return False
     return status == 200
@@ -263,20 +272,19 @@ def _gather_conflicts(bind_host: str, env_values: dict[str, str]) -> list[PortCo
     return conflicts
 
 
-def _pick_free_host_port(m: Any, bind_host: str, start: int, reserved: set[int]) -> int:
-    return int(m._pick_first_free_tcp_port(bind_host, int(start), set(reserved)))
+def _pick_free_host_port(bind_host: str, start: int, reserved: set[int]) -> int:
+    return int(_pick_first_free_tcp_port(bind_host, int(start), set(reserved)))
 
 
 def _apply_remap_keys(
     env_values: dict[str, str],
     keys: tuple[str, ...],
     new_host_port: int,
-    m: Any,
 ) -> dict[str, str]:
     updates: dict[str, str] = {}
     if keys == ("OLLAMA_LOCAL_URL", "OLLAMA_HOST"):
         prev = env_values.get("OLLAMA_LOCAL_URL", "http://127.0.0.1:11434")
-        updates["OLLAMA_LOCAL_URL"] = m._format_ollama_local_url_with_port(prev, new_host_port)
+        updates["OLLAMA_LOCAL_URL"] = _format_ollama_local_url_with_port(prev, new_host_port)
         updates["OLLAMA_HOST"] = f"0.0.0.0:{new_host_port}"
     elif keys == ("SEARXNG_PORT",):
         updates["SEARXNG_PORT"] = str(new_host_port)
@@ -354,7 +362,7 @@ def run_port_sentinel(
     if not conflicts:
         return env_values
 
-    m = _import_main_helpers()
+    m = _import_main_helpers()  # for _print (orchestrator helper, still in __main__)
     current = dict(env_values)
     interactive = sys.stdin.isatty()
     override_path = sentinel_override_path(root)
@@ -478,22 +486,22 @@ def run_port_sentinel(
                 continue
             reserved: set[int] = set()
             try:
-                plan = m._stack_port_plan(current)
+                plan = _stack_port_plan(current)
                 reserved = {port for _l, port in plan}
             except (TypeError, ValueError):
                 pass
             for p in REQUIRED_PORTS:
                 reserved.add(int(p))
             try:
-                new_port = _pick_free_host_port(m, bind_host, port + 1, reserved)
+                new_port = _pick_free_host_port(bind_host, port + 1, reserved)
             except RuntimeError as exc:
                 raise RuntimeError(
                     f"PortSentinel: could not find a free TCP port to remap from {port}."
                 ) from exc
-            updates = _apply_remap_keys(current, keys_opt, new_port, m)
+            updates = _apply_remap_keys(current, keys_opt, new_port)
             current.update(updates)
             try:
-                _rewrite(env_file, updates)
+                _port_plan._rewrite_env_file_string_values(env_file, updates)
             except RuntimeError as exc:
                 raise RuntimeError(f"PortSentinel: could not rewrite env file {env_file}") from exc
             logger.warning(
