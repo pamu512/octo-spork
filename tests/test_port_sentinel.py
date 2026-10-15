@@ -52,7 +52,7 @@ def test_non_interactive_remap_searxng(monkeypatch: pytest.MonkeyPatch, tmp_path
     env_file.write_text("SEARXNG_PORT=8080\n", encoding="utf-8")
     log = logging.getLogger("test")
 
-    def fake_pick(_m: object, host: str, start: int, reserved: set[int]) -> int:
+    def fake_pick(host: str, start: int, reserved: set[int]) -> int:
         return 18080
 
     with patch(
@@ -69,7 +69,9 @@ def test_non_interactive_remap_searxng(monkeypatch: pytest.MonkeyPatch, tmp_path
                             with patch(
                                 "local_ai_stack.port_sentinel._pick_free_host_port", side_effect=fake_pick
                             ):
-                                with patch("local_ai_stack.__main__._rewrite_env_file_string_values") as mock_rw:
+                                with patch(
+                                    "local_ai_stack.port_plan._rewrite_env_file_string_values"
+                                ) as mock_rw:
                                     out = run_port_sentinel(
                                         tmp_path,
                                         env_file,
@@ -78,3 +80,31 @@ def test_non_interactive_remap_searxng(monkeypatch: pytest.MonkeyPatch, tmp_path
                                     )
     assert out["SEARXNG_PORT"] == "18080"
     mock_rw.assert_called_once()
+
+
+def test_rewrite_env_file_string_values_byte_identical_round_trip(tmp_path: Path) -> None:
+    """Rewriting existing values must leave the file byte-identical (pure-move fixture)."""
+    from local_ai_stack.port_plan import _rewrite_env_file_string_values
+
+    env_file = tmp_path / ".env.local"
+    original = (
+        "# stack ports\n"
+        "\n"
+        "SEARXNG_PORT=8080\n"
+        "AGENTIC_FRONTEND_PORT=3010\n"
+        "\n"
+        "# section: ollama — inline note on a non-rewritten key stays untouched\n"
+        "OLLAMA_LOCAL_URL=http://127.0.0.1:11434\n"
+        "N8N_PORT=5678\n"
+    )
+    env_file.write_text(original, encoding="utf-8")
+    _rewrite_env_file_string_values(
+        env_file,
+        {
+            "SEARXNG_PORT": "8080",
+            "AGENTIC_FRONTEND_PORT": "3010",
+            "OLLAMA_LOCAL_URL": "http://127.0.0.1:11434",
+            "N8N_PORT": "5678",
+        },
+    )
+    assert env_file.read_text(encoding="utf-8") == original
