@@ -145,6 +145,7 @@ def run_ollama_pull_with_model_fallback(
     and set degraded-task instructions for downstream consumers.
     """
     import local_ai_stack.__main__ as main_mod
+    from local_ai_stack.stack_bootstrap import _configure_agenticseek_ini
 
     primary = (env_values.get("OLLAMA_MODEL") or "qwen2.5:14b").strip() or "qwen2.5:14b"
     cmd = ["ollama", "pull", primary]
@@ -213,7 +214,7 @@ def run_ollama_pull_with_model_fallback(
     merged = dict(env_values)
     merged.update(updates)
     try:
-        main_mod._configure_agenticseek_ini(agenticseek_path, merged)
+        _configure_agenticseek_ini(agenticseek_path, merged)
     except OSError as exc:
         logger.warning("ModelFallback: could not rewrite AgenticSeek config.ini: %s", exc)
 

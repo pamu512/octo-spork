@@ -55,6 +55,8 @@ def test_module_does_not_import_main() -> None:
         assert name != "__main__", f"stack_teardown imports {name!r}"
         assert name != "local_ai_stack.__main__", f"stack_teardown imports {name!r}"
         assert not name.startswith("local_ai_stack.__main__"), f"stack_teardown imports {name!r}"
+        assert name != "local_ai_stack.stack_bootstrap", f"stack_teardown imports {name!r}"
+        assert name != "stack_bootstrap", f"stack_teardown imports {name!r}"
     assert 'import_module("local_ai_stack.__main__")' not in src
     assert "import_module('local_ai_stack.__main__')" not in src
 
@@ -83,14 +85,18 @@ def test_main_reexports_same_objects_and_does_not_redefine() -> None:
     assert stack_main._run_subprocess_allow_fail is stack_teardown._run_subprocess_allow_fail
 
 
-def test_cli_helpers_bound_from_main_are_same_objects() -> None:
-    """Helpers that still live in the CLI module must be the same objects, not copies."""
+def test_cli_helpers_bound_from_bootstrap_are_same_objects() -> None:
+    """Helpers live in stack_bootstrap; bindings and __main__ re-exports are the same objects."""
+    from local_ai_stack import stack_bootstrap as boot
     from local_ai_stack import stack_teardown as teardown
     from local_ai_stack import __main__ as stack_main
 
-    assert teardown._compose_base_args is stack_main._compose_base_args
-    assert teardown._merge_process_env is stack_main._merge_process_env
-    assert teardown._resolve_agenticseek_path is stack_main._resolve_agenticseek_path
+    assert teardown._compose_base_args is boot._compose_base_args
+    assert teardown._merge_process_env is boot._merge_process_env
+    assert teardown._resolve_agenticseek_path is boot._resolve_agenticseek_path
+    assert stack_main._compose_base_args is boot._compose_base_args
+    assert stack_main._merge_process_env is boot._merge_process_env
+    assert stack_main._resolve_agenticseek_path is boot._resolve_agenticseek_path
 
 
 def test_cli_down_and_force_clean_help_unchanged() -> None:
