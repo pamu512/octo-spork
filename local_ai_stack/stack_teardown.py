@@ -5,8 +5,8 @@ byte-identical to their previous definitions in ``__main__``, which re-exports
 them for backward compatibility.
 
 This module does not import ``local_ai_stack.__main__`` (even lazily). Helpers
-that still live in the CLI module are bound onto this module by ``__main__``
-after they are defined.
+that live in ``stack_bootstrap`` are bound onto this module by
+``stack_bootstrap`` after they are defined.
 """
 from __future__ import annotations
 

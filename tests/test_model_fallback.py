@@ -45,7 +45,7 @@ class ModelFallbackTests(unittest.TestCase):
         with patch("local_ai_stack.model_fallback.list_local_ollama_model_names") as mock_tags:
             mock_tags.return_value = ["qwen2.5-coder:7b"]
             with patch("local_ai_stack.__main__._rewrite_env_file_string_values"):
-                with patch("local_ai_stack.__main__._configure_agenticseek_ini"):
+                with patch("local_ai_stack.stack_bootstrap._configure_agenticseek_ini"):
                     with patch("local_ai_stack.__main__._print"):
                         import local_ai_stack.__main__ as main_mod
 

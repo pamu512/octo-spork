@@ -40,6 +40,8 @@ def test_module_does_not_import_main() -> None:
         assert name != "__main__", f"stack_orchestrator imports {name!r}"
         assert name != "local_ai_stack.__main__", f"stack_orchestrator imports {name!r}"
         assert not name.startswith("local_ai_stack.__main__"), f"stack_orchestrator imports {name!r}"
+        assert name != "local_ai_stack.stack_bootstrap", f"stack_orchestrator imports {name!r}"
+        assert name != "stack_bootstrap", f"stack_orchestrator imports {name!r}"
     assert 'import_module("local_ai_stack.__main__")' not in src
     assert "import_module('local_ai_stack.__main__')" not in src
 
@@ -54,17 +56,22 @@ def test_main_reexports_same_class_and_does_not_redefine() -> None:
     assert stack_main.StackOrchestrator is stack_orchestrator.StackOrchestrator
 
 
-def test_cli_helpers_bound_from_main_are_same_objects() -> None:
-    """Helpers that still live in the CLI module must be the same objects, not copies."""
+def test_cli_helpers_bound_from_bootstrap_are_same_objects() -> None:
+    """Helpers live in stack_bootstrap; bindings and __main__ re-exports are the same objects."""
+    from local_ai_stack import stack_bootstrap as boot
     from local_ai_stack import stack_orchestrator as orch
     from local_ai_stack import __main__ as stack_main
 
-    assert orch.bootstrap is stack_main.bootstrap
-    assert orch._run is stack_main._run
-    assert orch._compose_base_args is stack_main._compose_base_args
-    assert orch._merge_process_env is stack_main._merge_process_env
-    assert orch._start_ollama_if_needed is stack_main._start_ollama_if_needed
-    assert orch._claude_agent_stack_available is stack_main._claude_agent_stack_available
+    assert orch.bootstrap is boot.bootstrap
+    assert orch._run is boot._run
+    assert orch._compose_base_args is boot._compose_base_args
+    assert orch._merge_process_env is boot._merge_process_env
+    assert orch._start_ollama_if_needed is boot._start_ollama_if_needed
+    assert orch._claude_agent_stack_available is boot._claude_agent_stack_available
+    assert stack_main.bootstrap is boot.bootstrap
+    assert stack_main._run is boot._run
+    assert stack_main._compose_base_args is boot._compose_base_args
+    assert stack_main.command_up is boot.command_up
 
 
 def test_verify_docker_daemon_missing_cli(tmp_path: Path) -> None:
