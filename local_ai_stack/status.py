@@ -1,7 +1,7 @@
 """Health dashboard for the local AI stack (SearXNG, Redis, n8n, host Ollama).
 
 CLI path stays ``python -m local_ai_stack status`` — this module is dispatch-only.
-Shared probes (env parse, HTTP, docker logs) stay in ``__main__``.
+Container constants and log-tail helpers live in ``stack_verify``.
 """
 from __future__ import annotations
 
@@ -95,15 +95,17 @@ def command_status(env_file: Path) -> None:
             "The status command requires the 'rich' package. Install with: python3 -m pip install rich"
         ) from exc
 
-    # Shared helpers stay in __main__ (hooks / orchestrator). Import after load to
-    # avoid a module-level cycle with dispatch.
-    from local_ai_stack.__main__ import (
+    # Log-tail helpers live in stack_verify. Remaining env/HTTP/_print helpers
+    # stay in __main__; import after load to avoid a module-level cycle with dispatch.
+    from local_ai_stack.stack_verify import (
         STATUS_CONTAINER_N8N,
         STATUS_CONTAINER_REDIS,
         STATUS_CONTAINER_SEARXNG,
         _docker_logs_tail,
-        _http_get_status,
         _ollama_host_log_snippet,
+    )
+    from local_ai_stack.__main__ import (
+        _http_get_status,
         _parse_env_file,
         _print,
     )

@@ -122,7 +122,7 @@ def run_pre_push_scan(
     repo_root = repo_root.expanduser().resolve()
 
     if not skip_health:
-        from local_ai_stack.__main__ import run_hook_infra_health_probe
+        from local_ai_stack.stack_verify import run_hook_infra_health_probe
 
         bad_health, health_logs = run_hook_infra_health_probe(env_file)
         if bad_health:
