@@ -120,7 +120,8 @@ def run_benchmark(
         "codeql/javascript-queries:codeql-suites/javascript-security-and-quality.qls",
     )
 
-    from local_ai_stack.__main__ import _load_grounded_review, _parse_env_file
+    from local_ai_stack.__main__ import _load_grounded_review
+    from local_ai_stack.env_validation import _parse_env_file
 
     env_values = _parse_env_file(env_file)
     ollama_url = (

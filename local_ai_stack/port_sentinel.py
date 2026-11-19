@@ -216,12 +216,6 @@ def _default_action_non_interactive() -> str:
     return "remap"
 
 
-def _import_main_helpers() -> Any:
-    from local_ai_stack import __main__ as main_mod
-
-    return main_mod
-
-
 def _stack_remappable_keys_for_port(port: int, env_values: dict[str, str]) -> tuple[str, ...] | None:
     _, ollama_port = _parse_ollama_local_url(env_values.get("OLLAMA_LOCAL_URL", "http://127.0.0.1:11434"))
     if port == int(ollama_port):
@@ -362,7 +356,8 @@ def run_port_sentinel(
     if not conflicts:
         return env_values
 
-    m = _import_main_helpers()  # for _print (orchestrator helper, still in __main__)
+    from local_ai_stack.cli_helpers import _print
+
     current = dict(env_values)
     interactive = sys.stdin.isatty()
     override_path = sentinel_override_path(root)
@@ -411,8 +406,6 @@ def run_port_sentinel(
                 "(see POSTGRES_PORT default 5433, SEARXNG_PORT, OLLAMA_LOCAL_URL)."
             )
         logger.warning(msg)
-        _print_fn = m._print
-        _rewrite = m._rewrite_env_file_string_values
 
         if interactive:
             action = _default_action_interactive()
@@ -432,7 +425,7 @@ def run_port_sentinel(
                 parts.append("  [2] Remap stack port — unavailable for this conflict")
             parts.append("  [3] Abort `up`")
             parts.append("  [4] Ignore for now (may fail later)")
-            _print_fn("\n".join(parts))
+            _print("\n".join(parts))
             try:
                 choice = input("Enter 1-4 [4]: ").strip() or "4"
             except EOFError:
@@ -468,7 +461,7 @@ def run_port_sentinel(
             for pid in pids:
                 if not kill_listener(pid, logger=logger):
                     raise RuntimeError(f"PortSentinel: failed to terminate PID {pid}.")
-            _print_fn(f"PortSentinel: signaled Docker listener PID(s) on port {port}.")
+            _print(f"PortSentinel: signaled Docker listener PID(s) on port {port}.")
             time.sleep(0.4)
             continue
 
@@ -510,7 +503,7 @@ def run_port_sentinel(
                 new_port,
                 ",".join(updates.keys()),
             )
-            _print_fn(
+            _print(
                 f"PortSentinel: remapped TCP {port} -> {new_port} ({', '.join(sorted(updates.keys()))})."
             )
             yaml_root = _merge_override_services(yaml_root, port, new_port, keys_opt)

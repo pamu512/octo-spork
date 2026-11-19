@@ -95,8 +95,8 @@ def command_status(env_file: Path) -> None:
             "The status command requires the 'rich' package. Install with: python3 -m pip install rich"
         ) from exc
 
-    # Log-tail helpers live in stack_verify. Remaining env/HTTP/_print helpers
-    # stay in __main__; import after load to avoid a module-level cycle with dispatch.
+    # Log-tail helpers live in stack_verify. Env/HTTP/_print helpers
+    # come from env_validation / port_plan / cli_helpers.
     from local_ai_stack.stack_verify import (
         STATUS_CONTAINER_N8N,
         STATUS_CONTAINER_REDIS,
@@ -104,11 +104,9 @@ def command_status(env_file: Path) -> None:
         _docker_logs_tail,
         _ollama_host_log_snippet,
     )
-    from local_ai_stack.__main__ import (
-        _http_get_status,
-        _parse_env_file,
-        _print,
-    )
+    from local_ai_stack.cli_helpers import _print
+    from local_ai_stack.port_plan import _http_get_status
+    from local_ai_stack.env_validation import _parse_env_file
 
     try:
         env_values = _parse_env_file(env_file)

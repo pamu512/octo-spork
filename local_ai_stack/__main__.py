@@ -80,6 +80,10 @@ from local_ai_stack.stack_verify import (  # noqa: F401  (re-exported for backwa
     run_hook_infra_health_probe,
     command_verify,
 )
+from local_ai_stack.cli_helpers import (  # noqa: F401  (re-exported for backward compat)
+    _print,
+    _repo_path_from_arg,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,10 +93,6 @@ COMPOSE_PROJECT_NAME = "octo-spork-local-ai"
 CLAUDE_AGENT_COMPOSE_FILE = ROOT / "deploy" / "local-ai" / "docker-compose.claude-agent.yml"
 OVERLAY_SOURCE = ROOT / "overlays" / "agenticseek" / "sources" / "grounded_review.py"
 REVIEW_TICKET_EXPORT_SOURCE = ROOT / "overlays" / "agenticseek" / "sources" / "review_ticket_export.py"
-
-
-def _print(message: str) -> None:
-    print(message, flush=True)
 
 
 def _truthy_env(name: str) -> bool:
@@ -437,13 +437,6 @@ def command_export_tickets(review_file: str | None, snapshot_json: str | None, o
     out = Path(output).expanduser().resolve()
     rte.export_review_tickets_json(md, snap, out, query=query or None)
     _print(f"Wrote ticket export: {out}")
-
-
-def _repo_path_from_arg(raw: str) -> Path:
-    path = Path(raw).expanduser()
-    if not path.is_absolute():
-        path = Path.cwd() / path
-    return path.resolve()
 
 
 def command_diff_preview(repo: str, base: str, head: str, query: str) -> None:

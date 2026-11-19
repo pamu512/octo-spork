@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def _lines_from_trivy_critical_report(report: dict[str, Any]) -> list[str]:
     lines: list[str] = []
@@ -156,7 +158,7 @@ def command_pre_push_scan(
     skip_health: bool,
     skip_trivy: bool,
 ) -> None:
-    from local_ai_stack.__main__ import _repo_path_from_arg
+    from local_ai_stack.cli_helpers import _repo_path_from_arg
 
     code = run_pre_push_scan(
         env_file,
@@ -170,7 +172,7 @@ def command_pre_push_scan(
 
 def command_install_hook(repo: str, env_file: Path, *, force: bool) -> None:
     """Write a pre-push hook that runs ``pre-push-scan`` for this worktree."""
-    from local_ai_stack.__main__ import ROOT, _print, _repo_path_from_arg
+    from local_ai_stack.cli_helpers import _print, _repo_path_from_arg
 
     repo_path = _repo_path_from_arg(repo)
     git_dir = repo_path / ".git"

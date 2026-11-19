@@ -44,11 +44,9 @@ class ModelFallbackTests(unittest.TestCase):
 
         with patch("local_ai_stack.model_fallback.list_local_ollama_model_names") as mock_tags:
             mock_tags.return_value = ["qwen2.5-coder:7b"]
-            with patch("local_ai_stack.__main__._rewrite_env_file_string_values"):
+            with patch("local_ai_stack.port_plan._rewrite_env_file_string_values") as mock_rw:
                 with patch("local_ai_stack.stack_bootstrap._configure_agenticseek_ini"):
-                    with patch("local_ai_stack.__main__._print"):
-                        import local_ai_stack.__main__ as main_mod
-
+                    with patch("local_ai_stack.cli_helpers._print") as mock_print:
                         out = run_ollama_pull_with_model_fallback(
                             root,
                             env_file,
@@ -59,3 +57,5 @@ class ModelFallbackTests(unittest.TestCase):
                         )
         self.assertEqual(out["OLLAMA_MODEL"], "qwen2.5-coder:7b")
         self.assertEqual(out["OCTO_DEGRADED_TASK_INSTRUCTION"], DEGRADED_INSTRUCTION)
+        mock_rw.assert_called_once()
+        mock_print.assert_called()
