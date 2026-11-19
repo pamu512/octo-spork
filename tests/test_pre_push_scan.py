@@ -97,11 +97,22 @@ class TestCommandInstallHookFailClosed(unittest.TestCase):
             env_file = repo / ".env"
             env_file.write_text("", encoding="utf-8")
             printed: list[str] = []
-            with mock.patch("local_ai_stack.__main__._print", side_effect=printed.append):
+            with mock.patch("local_ai_stack.cli_helpers._print", side_effect=printed.append):
                 with mock.patch.object(Path, "chmod", side_effect=OSError("EPERM")):
                     with self.assertRaises(RuntimeError):
                         command_install_hook(str(repo), env_file, force=False)
             self.assertFalse(any("Wrote" in msg for msg in printed))
+
+    def test_install_hook_prints_wrote_via_cli_helpers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / ".git" / "hooks").mkdir(parents=True)
+            env_file = repo / ".env"
+            env_file.write_text("", encoding="utf-8")
+            printed: list[str] = []
+            with mock.patch("local_ai_stack.cli_helpers._print", side_effect=printed.append):
+                command_install_hook(str(repo), env_file, force=False)
+            self.assertTrue(any("Wrote" in msg for msg in printed))
 
 
 if __name__ == "__main__":

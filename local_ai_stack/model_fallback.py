@@ -144,12 +144,13 @@ def run_ollama_pull_with_model_fallback(
     pick a local small Coder model, rewrite the env file, refresh AgenticSeek ``config.ini``,
     and set degraded-task instructions for downstream consumers.
     """
-    import local_ai_stack.__main__ as main_mod
+    from local_ai_stack.cli_helpers import _print
+    from local_ai_stack.port_plan import _rewrite_env_file_string_values
     from local_ai_stack.stack_bootstrap import _configure_agenticseek_ini
 
     primary = (env_values.get("OLLAMA_MODEL") or "qwen2.5:14b").strip() or "qwen2.5:14b"
     cmd = ["ollama", "pull", primary]
-    main_mod._print(f"+ {' '.join(cmd)}")
+    _print(f"+ {' '.join(cmd)}")
     proc = subprocess.run(
         cmd,
         env=process_env,
@@ -195,7 +196,7 @@ def run_ollama_pull_with_model_fallback(
         primary,
         fallback,
     )
-    main_mod._print(
+    _print(
         f"ModelFallback: primary {primary!r} failed under memory pressure — "
         f"using local {fallback!r} with degraded-task instructions "
         f"(see {ENV_DEGRADED_INSTRUCTION} in {env_file})."
@@ -207,7 +208,7 @@ def run_ollama_pull_with_model_fallback(
         ENV_DEGRADED_INSTRUCTION: DEGRADED_INSTRUCTION,
     }
     try:
-        main_mod._rewrite_env_file_string_values(env_file, updates)
+        _rewrite_env_file_string_values(env_file, updates)
     except RuntimeError as exc:
         raise RuntimeError(f"ModelFallback: could not update env file {env_file}") from exc
 
